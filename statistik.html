@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Statistik NILAM</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <p class="eyebrow">SMK HAMID KHAN</p>
+      <h1>PEREKODAN NILAM BULANAN</h1>
+      <nav class="top-nav" aria-label="Navigasi utama">
+        <a href="index.html">Masuk Data</a>
+        <a href="status-pengisian.html">Status Pengisian</a>
+        <a href="statistik.html" class="active" aria-current="page">Statistik</a>
+        <a href="admin.html">Admin</a>
+      </nav>
+    </header>
+
+    <section class="controls" aria-label="Penapis statistik">
+      <label for="statTahun">Tahun</label>
+      <input id="statTahun" name="statTahun" type="number" readonly>
+
+      <label for="statBulan">Bulan</label>
+      <select id="statBulan" name="statBulan"></select>
+
+      <label for="statKelas">Kelas</label>
+      <select id="statKelas" name="statKelas"></select>
+    </section>
+
+    <p id="statStatus" role="status" aria-live="polite"></p>
+
+    <section class="table-wrap">
+      <table id="summaryTable">
+        <thead>
+          <tr id="summaryHeadRow"></tr>
+        </thead>
+        <tbody id="summaryTbody">
+          <tr>
+            <td colspan="10" class="empty">Tiada data ringkasan.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="stats-grid">
+      <article class="card">
+        <h2 id="pieTitle">Jenis Bahan Dibaca (Semua Kelas / Sepanjang Tahun)</h2>
+        <div id="pieWrap" class="chart-wrap"></div>
+      </article>
+
+      <article class="card">
+        <h2 id="barTitle">Jumlah Bacaan Murid (Semua Kelas / Sepanjang Tahun)</h2>
+        <div id="barWrap" class="chart-wrap"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="students-data.js"></script>
+  <script src="shared-data.js"></script>
+  <script src="statistik.js"></script>
+</body>
+</html>

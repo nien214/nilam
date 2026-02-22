@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Status Pengisian NILAM</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <p class="eyebrow">SMK HAMID KHAN</p>
+      <h1>PEREKODAN NILAM BULANAN</h1>
+      <nav class="top-nav" aria-label="Navigasi utama">
+        <a href="index.html">Masuk Data</a>
+        <a href="status-pengisian.html" class="active" aria-current="page">Status Pengisian</a>
+        <a href="statistik.html">Statistik</a>
+        <a href="admin.html">Admin</a>
+      </nav>
+    </header>
+
+    <p id="statusInfo" role="status" aria-live="polite"></p>
+
+    <section class="table-wrap">
+      <table id="statusTable" class="status-table">
+        <thead>
+          <tr>
+            <th>Kelas</th>
+            <th>Januari</th>
+            <th>Februari</th>
+            <th>Mac</th>
+            <th>April</th>
+            <th>Mei</th>
+            <th>Jun</th>
+            <th>Julai</th>
+            <th>Ogos</th>
+            <th>September</th>
+            <th>Oktober</th>
+            <th>November</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="12" class="empty">Memuatkan status...</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="legend-inline">
+      <span><i class="light light-green"></i> Hijau: >= 50% murid telah isi.</span>
+      <span><i class="light light-red"></i> Merah: < 50% murid telah isi.</span>
+      <span><i class="light light-gray"></i> Kelabu: bulan akan datang.</span>
+    </p>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="students-data.js"></script>
+  <script src="shared-data.js"></script>
+  <script src="status-pengisian.js"></script>
+</body>
+</html>

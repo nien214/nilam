@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin NILAM</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <p class="eyebrow">SMK HAMID KHAN</p>
+      <h1>PEREKODAN NILAM BULANAN</h1>
+      <nav class="top-nav" aria-label="Navigasi utama">
+        <a href="index.html">Masuk Data</a>
+        <a href="status-pengisian.html">Status Pengisian</a>
+        <a href="statistik.html">Statistik</a>
+        <a href="admin.html" class="active" aria-current="page">Admin</a>
+      </nav>
+    </header>
+
+    <section id="adminLoginInfo" class="card">
+      <h2>Admin</h2>
+      <p>Login diperlukan untuk akses fungsi admin.</p>
+      <button id="loginBtn" type="button" class="save-btn">Login Admin</button>
+    </section>
+
+    <section id="adminPanel" class="card" hidden>
+      <h2>Panel Admin</h2>
+      <div class="admin-actions">
+        <button id="importNamelistBtn" type="button" class="save-btn">Import Namelist (.csv)</button>
+        <input id="namelistFileInput" type="file" accept=".csv,text/csv" hidden>
+        <p class="warning-text">Warning: This will overwrites the current namelist.</p>
+
+        <button id="importDataBtn" type="button" class="save-btn">Import Data (.csv)</button>
+        <input id="dataFileInput" type="file" accept=".csv,text/csv" hidden>
+        <p class="warning-text">Import data akan merge ikut Tahun + Bulan + No. Kad Pengenalan. Jika data wujud, nilai baharu akan override.</p>
+
+        <button id="resetDataBtn" type="button" class="save-btn danger-btn">Reset All Data</button>
+        <p class="warning-text">Warning: This will deletes all the data, not namelist.</p>
+
+        <button id="manageStudentsBtn" type="button" class="save-btn">Pengurusan senarai murid</button>
+
+        <button id="logoutBtn" type="button" class="save-btn secondary-btn">Logout</button>
+      </div>
+    </section>
+
+    <section id="studentManageSection" class="card" hidden>
+      <h2>Pengurusan Senarai Murid</h2>
+      <p class="warning-text">Perubahan akan terus digunakan oleh Masuk Data dan Statistik selepas simpan.</p>
+      <div class="table-wrap">
+        <table id="studentManageTable" class="manage-table">
+          <thead>
+            <tr>
+              <th>Nama</th>
+              <th>Jantina</th>
+              <th>Kelas</th>
+              <th>No. Kad Pengenalan</th>
+              <th>Email Google Classroom</th>
+              <th>Tindakan</th>
+            </tr>
+          </thead>
+          <tbody id="studentManageTbody"></tbody>
+        </table>
+      </div>
+      <div class="table-actions">
+        <button id="addStudentRowBtn" type="button" class="save-btn">Tambah Murid</button>
+        <button id="saveStudentsBtn" type="button" class="save-btn">Simpan Senarai Murid</button>
+      </div>
+    </section>
+
+    <p id="adminStatus" role="status" aria-live="polite"></p>
+  </main>
+
+  <div id="importDataModal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <h3>Import Data CSV</h3>
+      <div class="inline-fields">
+        <label for="importYearInput">Tahun</label>
+        <input id="importYearInput" type="number" min="2000" max="2100" step="1">
+      </div>
+      <div class="inline-fields">
+        <label for="importMonthSelect">Bulan</label>
+        <select id="importMonthSelect"></select>
+      </div>
+      <div class="table-actions">
+        <button id="cancelImportDataBtn" type="button" class="save-btn secondary-btn">Batal</button>
+        <button id="confirmImportDataBtn" type="button" class="save-btn">Teruskan Import</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="students-data.js"></script>
+  <script src="shared-data.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

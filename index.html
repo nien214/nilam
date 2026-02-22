@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perekodan NILAM Bulanan</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <p class="eyebrow">SMK HAMID KHAN</p>
+      <h1>PEREKODAN NILAM BULANAN</h1>
+      <nav class="top-nav" aria-label="Navigasi utama">
+        <a href="index.html" class="active" aria-current="page">Masuk Data</a>
+        <a href="status-pengisian.html">Status Pengisian</a>
+        <a href="statistik.html">Statistik</a>
+        <a href="admin.html">Admin</a>
+      </nav>
+      <p>Sila isikan butiran berikut, terima kasih</p>
+    </header>
+
+    <section class="controls" aria-label="Butiran borang">
+      <label for="tahun">Tahun</label>
+      <input id="tahun" name="tahun" type="number" readonly>
+
+      <label for="bulan">Bulan</label>
+      <select id="bulan" name="bulan"></select>
+
+      <label for="kelas">Kelas</label>
+      <select id="kelas" name="kelas">
+        <option value="">Pilih kelas</option>
+      </select>
+    </section>
+
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <section class="table-wrap">
+      <table id="studentTable">
+        <thead>
+          <tr>
+            <th>Bil</th>
+            <th>Nama</th>
+            <th>Kelas</th>
+            <th>Bahan<br>Digital</th>
+            <th>Bahan Bukan<br>Buku</th>
+            <th>Fiksyen</th>
+            <th>Bukan<br>Fiksyen</th>
+            <th>Bahasa<br>Melayu</th>
+            <th>Bahasa<br>Inggeris</th>
+            <th>Lain-lain<br>Bahasa</th>
+            <th>Jumlah<br>Bacaan</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="11" class="empty">Pilih kelas untuk paparkan senarai murid.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+    <div class="table-actions">
+      <button id="saveAllBottom" type="button" class="save-btn">Simpan Rekod</button>
+    </div>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="students-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
