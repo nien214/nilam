@@ -475,21 +475,30 @@
 
   async function deleteAllSupabaseData(config) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
-    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?id=gt.0`;
+    const headers = {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
+      Prefer: "return=minimal",
+    };
+    const endpoints = [
+      `${supabaseUrl}/rest/v1/nilam_records?id=gt.0`,
+      `${supabaseUrl}/rest/v1/nilam_records?bulan=not.is.null`,
+    ];
+    let lastError = "";
 
-    const response = await fetch(endpoint, {
-      method: "DELETE",
-      headers: {
-        apikey: config.supabaseAnonKey,
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
-        Prefer: "return=minimal",
-      },
-    });
-
-    if (!response.ok) {
+    for (const endpoint of endpoints) {
+      const response = await fetch(endpoint, {
+        method: "DELETE",
+        headers,
+      });
+      if (response.ok) {
+        return;
+      }
       const detail = await response.text();
-      throw new Error(`Ralat padam Supabase (${response.status}): ${detail}`);
+      lastError = `Ralat padam Supabase (${response.status}): ${detail}`;
     }
+
+    throw new Error(lastError || "Ralat padam Supabase tidak diketahui.");
   }
 
   function normalizeStudentRow(row) {

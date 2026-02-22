@@ -130,6 +130,11 @@ group by
 alter table public.nilam_records enable row level security;
 alter table public.nilam_students enable row level security;
 
+grant usage on schema public to anon;
+grant select, insert, update, delete on table public.nilam_records to anon;
+grant select, insert, update, delete on table public.nilam_students to anon;
+grant usage, select on all sequences in schema public to anon;
+
 drop policy if exists "allow_insert_update_select_for_anon" on public.nilam_records;
 create policy "allow_insert_update_select_for_anon"
 on public.nilam_records
