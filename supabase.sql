@@ -80,6 +80,38 @@ begin
 end;
 $$;
 
+-- Keep nilam_students class columns in sync from monthly records by year
+create or replace function public.sync_student_from_nilam_record()
+returns trigger
+language plpgsql
+as $$
+declare
+  kelas_col text;
+begin
+  insert into public.nilam_students (no_kad_pengenalan, nama_murid)
+  values (new.no_kad_pengenalan, new.nama)
+  on conflict (no_kad_pengenalan)
+  do update set
+    nama_murid = excluded.nama_murid,
+    updated_at = now();
+
+  if new.tahun ~ '^\d{4}$' then
+    kelas_col := format('kelas_%s', new.tahun);
+    if kelas_col = any (array['kelas_2026', 'kelas_2027', 'kelas_2028', 'kelas_2029', 'kelas_2030', 'kelas_2031']) then
+      execute format(
+        'update public.nilam_students
+         set %I = $1, nama_murid = $2, updated_at = now()
+         where no_kad_pengenalan = $3',
+        kelas_col
+      )
+      using new.kelas, new.nama, new.no_kad_pengenalan;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
 drop trigger if exists trg_nilam_records_updated_at on public.nilam_records;
 create trigger trg_nilam_records_updated_at
 before update on public.nilam_records
@@ -90,13 +122,53 @@ create trigger trg_nilam_students_updated_at
 before update on public.nilam_students
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_sync_student_from_record on public.nilam_records;
+create trigger trg_sync_student_from_record
+after insert or update of tahun, kelas, nama, no_kad_pengenalan on public.nilam_records
+for each row execute function public.sync_student_from_nilam_record();
+
+-- Backfill kelas_2026..kelas_2031 from existing records (latest class per student per year)
+do $$
+declare
+  y integer;
+  col_name text;
+begin
+  for y in 2026..2031 loop
+    col_name := format('kelas_%s', y);
+    execute format(
+      $fmt$
+      with ranked as (
+        select distinct on (no_kad_pengenalan)
+          no_kad_pengenalan,
+          kelas
+        from public.nilam_records
+        where tahun = %L
+          and coalesce(kelas, '') <> ''
+        order by
+          no_kad_pengenalan,
+          coalesce(updated_at_client, updated_at, created_at) desc
+      )
+      update public.nilam_students s
+      set %I = r.kelas,
+          updated_at = now()
+      from ranked r
+      where s.no_kad_pengenalan = r.no_kad_pengenalan
+      $fmt$,
+      y::text,
+      col_name
+    );
+  end loop;
+end;
+$$;
+
 -- Yearly summary pivot (class + yearly total 2026..2031)
-create or replace view public.nilam_student_year_summary as
+drop view if exists public.nilam_student_year_summary;
+create view public.nilam_student_year_summary as
 with agg as (
   select
     no_kad_pengenalan,
     tahun,
-    sum(jumlah_aktiviti)::integer as total_aktiviti
+    sum(jumlah_aktiviti)::integer as total_bacaan
   from public.nilam_records
   group by no_kad_pengenalan, tahun
 )
@@ -109,12 +181,12 @@ select
   s.kelas_2029,
   s.kelas_2030,
   s.kelas_2031,
-  coalesce(max(case when a.tahun = '2026' then a.total_aktiviti end), 0) as jumlah_aktiviti_2026,
-  coalesce(max(case when a.tahun = '2027' then a.total_aktiviti end), 0) as jumlah_aktiviti_2027,
-  coalesce(max(case when a.tahun = '2028' then a.total_aktiviti end), 0) as jumlah_aktiviti_2028,
-  coalesce(max(case when a.tahun = '2029' then a.total_aktiviti end), 0) as jumlah_aktiviti_2029,
-  coalesce(max(case when a.tahun = '2030' then a.total_aktiviti end), 0) as jumlah_aktiviti_2030,
-  coalesce(max(case when a.tahun = '2031' then a.total_aktiviti end), 0) as jumlah_aktiviti_2031
+  coalesce(max(case when a.tahun = '2026' then a.total_bacaan end), 0) as jumlah_bacaan_2026,
+  coalesce(max(case when a.tahun = '2027' then a.total_bacaan end), 0) as jumlah_bacaan_2027,
+  coalesce(max(case when a.tahun = '2028' then a.total_bacaan end), 0) as jumlah_bacaan_2028,
+  coalesce(max(case when a.tahun = '2029' then a.total_bacaan end), 0) as jumlah_bacaan_2029,
+  coalesce(max(case when a.tahun = '2030' then a.total_bacaan end), 0) as jumlah_bacaan_2030,
+  coalesce(max(case when a.tahun = '2031' then a.total_bacaan end), 0) as jumlah_bacaan_2031
 from public.nilam_students s
 left join agg a on a.no_kad_pengenalan = s.no_kad_pengenalan
 group by
