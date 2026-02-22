@@ -521,16 +521,29 @@ td:nth-child(11) {
   }
 
   #studentTable {
-    min-width: 980px;
+    min-width: 1360px;
+    table-layout: fixed;
   }
 
   #studentTable th:nth-child(2),
   #studentTable td:nth-child(2) {
-    width: 34ch;
+    width: 210px;
+    left: 52px;
   }
 
   #studentTable th:nth-child(n + 3),
   #studentTable td:nth-child(n + 3) {
-    width: calc((100% - 38ch) / 9);
+    width: 110px;
+  }
+
+  #studentTable th:nth-child(1),
+  #studentTable td:nth-child(1) {
+    width: 52px;
+    left: 0;
+  }
+
+  #studentTable th {
+    white-space: nowrap;
+    line-height: 1.2;
   }
 }
