@@ -557,4 +557,14 @@ td:nth-child(11) {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  #studentTable thead th,
+  #studentTable th:nth-child(1),
+  #studentTable td:nth-child(1),
+  #studentTable th:nth-child(2),
+  #studentTable td:nth-child(2) {
+    position: static;
+    left: auto;
+    z-index: auto;
+  }
 }
