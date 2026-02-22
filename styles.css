@@ -521,29 +521,40 @@ td:nth-child(11) {
   }
 
   #studentTable {
-    min-width: 1360px;
+    min-width: 980px;
     table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
   }
 
   #studentTable th:nth-child(2),
   #studentTable td:nth-child(2) {
-    width: 210px;
-    left: 52px;
+    width: 160px;
+    left: 44px;
   }
 
   #studentTable th:nth-child(n + 3),
   #studentTable td:nth-child(n + 3) {
-    width: 110px;
+    width: 86px;
   }
 
   #studentTable th:nth-child(1),
   #studentTable td:nth-child(1) {
-    width: 52px;
+    width: 44px;
     left: 0;
   }
 
   #studentTable th {
-    white-space: nowrap;
+    white-space: normal;
     line-height: 1.2;
+    overflow: hidden;
+    text-overflow: clip;
+    word-break: break-word;
+  }
+
+  #studentTable td:nth-child(n + 3) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
