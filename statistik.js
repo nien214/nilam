@@ -2,36 +2,48 @@
   "use strict";
 
   const MONTHS = window.NILAM_DATA.MONTHS;
-  const MATERIAL_KEYS = [
+  const MATERIAL_DONUT_KEYS = [
     ["bahan_digital", "Bahan Digital"],
     ["bahan_bukan_buku", "Bahan Bukan Buku"],
-    ["fiksyen", "Fiksyen"],
-    ["bukan_fiksyen", "Bukan Fiksyen"],
+    ["bukan_fiksyen", "Buku Bukan Fiksyen"],
+    ["fiksyen", "Buku Fiksyen"],
+  ];
+  const LANGUAGE_KEYS = [
     ["bahasa_melayu", "Bahasa Melayu"],
     ["bahasa_inggeris", "Bahasa Inggeris"],
     ["lain_lain_bahasa", "Lain-lain Bahasa"],
   ];
+  const TINGKATAN_ORDER = ["PER", "1", "2", "3", "4", "5"];
   const PIE_COLORS = ["#1b9aaa", "#ef476f", "#ffd166", "#06d6a0", "#118ab2", "#ff8fab", "#a0c4ff"];
   const BAR_COLORS = ["#127475", "#ef476f", "#ffd166", "#06d6a0", "#118ab2", "#f97316", "#8b5cf6", "#0ea5e9", "#22c55e", "#e11d48"];
 
   const el = {
     tahun: document.getElementById("statTahun"),
     bulan: document.getElementById("statBulan"),
+    tingkatan: document.getElementById("statTingkatan"),
     kelas: document.getElementById("statKelas"),
     status: document.getElementById("statStatus"),
     pieTitle: document.getElementById("pieTitle"),
+    languageTitle: document.getElementById("languageTitle"),
+    tingkatanTitle: document.getElementById("tingkatanTitle"),
     barTitle: document.getElementById("barTitle"),
+    heatmapTitle: document.getElementById("heatmapTitle"),
     summaryHeadRow: document.getElementById("summaryHeadRow"),
     summaryTbody: document.getElementById("summaryTbody"),
     pieWrap: document.getElementById("pieWrap"),
+    languageWrap: document.getElementById("languageWrap"),
+    tingkatanWrap: document.getElementById("tingkatanWrap"),
     barWrap: document.getElementById("barWrap"),
+    heatmapWrap: document.getElementById("heatmapWrap"),
   };
 
   const state = {
     records: [],
+    allClasses: [],
     classes: [],
     selectedYear: String(new Date().getFullYear()),
     selectedMonth: "",
+    selectedTingkatan: "__all__",
     selectedClass: "",
   };
 
@@ -41,9 +53,10 @@
     try {
       const data = await window.NILAM_DATA.loadAllData();
       state.records = data.records;
-      state.classes = [...new Set([...data.studentsByClass.keys(), ...data.records.map((row) => row.kelas)])].sort(
+      state.allClasses = [...new Set([...data.studentsByClass.keys(), ...data.records.map((row) => row.kelas)])].sort(
         (a, b) => a.localeCompare(b, "ms")
       );
+      state.classes = [...state.allClasses];
 
       initDropdowns();
       renderAll();
@@ -62,7 +75,7 @@
 
     const yearlyOption = document.createElement("option");
     yearlyOption.value = "__year__";
-    yearlyOption.textContent = "Sepanjang Tahun";
+    yearlyOption.textContent = getSehinggaLabel(state.records, state.selectedYear);
     el.bulan.appendChild(yearlyOption);
 
     MONTHS.forEach((month) => {
@@ -75,6 +88,24 @@
     el.bulan.value = "__year__";
     state.selectedMonth = "__year__";
 
+    el.tingkatan.innerHTML = "";
+    const allTingkatanOption = document.createElement("option");
+    allTingkatanOption.value = "__all__";
+    allTingkatanOption.textContent = "Semua Tingkatan";
+    el.tingkatan.appendChild(allTingkatanOption);
+    ["PER", "1", "2", "3", "4", "5"].forEach((tingkatan) => {
+      const option = document.createElement("option");
+      option.value = tingkatan;
+      option.textContent = tingkatan;
+      el.tingkatan.appendChild(option);
+    });
+    el.tingkatan.value = "__all__";
+    state.selectedTingkatan = "__all__";
+
+    initClassDropdown();
+  }
+
+  function initClassDropdown() {
     el.kelas.innerHTML = '<option value="">Pilih kelas</option>';
     const allOption = document.createElement("option");
     allOption.value = "__all__";
@@ -98,6 +129,13 @@
       renderAll();
     });
 
+    el.tingkatan.addEventListener("change", () => {
+      state.selectedTingkatan = el.tingkatan.value;
+      state.classes = filterClassesByTingkatan(state.allClasses, state.selectedTingkatan);
+      initClassDropdown();
+      renderAll();
+    });
+
     el.kelas.addEventListener("change", () => {
       state.selectedClass = el.kelas.value;
       renderAll();
@@ -109,15 +147,22 @@
       el.status.textContent = "Sila pilih bulan dan kelas.";
       renderEmptySummary(true);
       el.pieWrap.innerHTML = '<p class="empty">Tiada data.</p>';
+      el.languageWrap.innerHTML = '<p class="empty">Tiada data.</p>';
+      el.tingkatanWrap.innerHTML = '<p class="empty">Tiada data.</p>';
       el.barWrap.innerHTML = '<p class="empty">Tiada data.</p>';
+      el.heatmapWrap.innerHTML = '<p class="empty">Tiada data.</p>';
       return;
     }
 
     const isYearMode = state.selectedMonth === "__year__";
     const isAllClasses = state.selectedClass === "__all__";
-    const periodText = isYearMode ? "Sepanjang Tahun" : state.selectedMonth;
+    const periodText = isYearMode
+      ? getSehinggaLabel(state.records, state.selectedYear)
+      : state.selectedMonth;
+    const tingkatanText = state.selectedTingkatan === "__all__" ? "Semua Tingkatan" : `Tingkatan ${state.selectedTingkatan}`;
     const classText = isAllClasses ? "Semua Kelas" : state.selectedClass;
-    updateChartTitles(classText, periodText);
+    const recentMonthText = getMostRecentMonthText(state.records, state.selectedYear, state.selectedMonth);
+    updateChartTitles(classText, periodText, tingkatanText, recentMonthText);
 
     const periodRecords = state.records.filter((row) => {
       if (String(row.tahun || "") !== state.selectedYear) {
@@ -129,30 +174,49 @@
       return row.bulan === state.selectedMonth;
     });
 
-    renderSummaryTable(periodRecords, isAllClasses, state.selectedClass);
+    const tingkatanRecords = state.selectedTingkatan === "__all__"
+      ? periodRecords
+      : periodRecords.filter((row) => classToTingkatan(row.kelas) === state.selectedTingkatan);
+
+    renderSummaryTable(tingkatanRecords, isAllClasses, state.selectedClass);
 
     const filtered = isAllClasses
-      ? periodRecords
-      : periodRecords.filter((row) => row.kelas === state.selectedClass);
+      ? tingkatanRecords
+      : tingkatanRecords.filter((row) => row.kelas === state.selectedClass);
 
     if (!filtered.length) {
-      el.status.textContent = `Tiada rekod untuk ${state.selectedYear} ${periodText} ${classText}.`;
+      el.status.textContent = `Tiada rekod untuk ${state.selectedYear} ${periodText} ${tingkatanText} ${classText}.`;
       el.pieWrap.innerHTML = '<p class="empty">Tiada data jenis bahan.</p>';
+      el.languageWrap.innerHTML = '<p class="empty">Tiada data bahasa.</p>';
+      el.tingkatanWrap.innerHTML = '<p class="empty">Tiada data tingkatan.</p>';
       el.barWrap.innerHTML = '<p class="empty">Tiada data jumlah bacaan.</p>';
+      el.heatmapWrap.innerHTML = '<p class="empty">Tiada data kelas.</p>';
       return;
     }
 
-    el.status.textContent = `${filtered.length} rekod dianalisis untuk ${state.selectedYear} ${periodText} ${classText}.`;
+    el.status.textContent = `${filtered.length} rekod dianalisis untuk ${state.selectedYear} ${periodText} ${tingkatanText} ${classText}.`;
     renderPie(filtered);
+    renderLanguageBars(filtered);
+    renderTingkatanBars(tingkatanRecords);
     renderBar(filtered);
+    renderClassHeatmap(filtered);
   }
 
-  function updateChartTitles(classText, periodText) {
+  function updateChartTitles(classText, periodText, tingkatanText, recentMonthText) {
     if (el.pieTitle) {
-      el.pieTitle.textContent = `Jenis Bahan Dibaca (${classText} / ${periodText})`;
+      el.pieTitle.textContent = `Analisis Bacaan Mengikut Jenis Bahan (${classText} / ${periodText})`;
+    }
+    if (el.languageTitle) {
+      el.languageTitle.textContent = `Pilihan Bahasa (${classText} / ${periodText})`;
+    }
+    if (el.tingkatanTitle) {
+      el.tingkatanTitle.textContent = `Analisis Jumlah Bacaan Mengikut Tingkatan (${periodText})`;
     }
     if (el.barTitle) {
-      el.barTitle.textContent = `Jumlah Bacaan Murid (${classText} / ${periodText})`;
+      el.barTitle.textContent = `Jumlah Bacaan Murid Tertinggi sehingga ${recentMonthText} (${classText})`;
+    }
+    if (el.heatmapTitle) {
+      el.heatmapTitle.textContent = `Analisis Jumlah Bacaan Mengikut Kelas (${tingkatanText} / ${periodText})`;
     }
   }
 
@@ -398,7 +462,7 @@
   }
 
   function renderPie(records) {
-    const totals = MATERIAL_KEYS.map(([key, label], index) => ({
+    const totals = MATERIAL_DONUT_KEYS.map(([key, label], index) => ({
       key,
       label,
       value: records.reduce((sum, row) => sum + Number(row[key] || 0), 0),
@@ -415,9 +479,30 @@
     const cx = 130;
     const cy = 130;
     const radius = 90;
+    const positiveItems = totals.filter((item) => item.value > 0);
 
-    const slices = totals
-      .filter((item) => item.value > 0)
+    if (positiveItems.length === 1) {
+      const only = positiveItems[0];
+      const legendSingle = totals
+        .map((item) => {
+          const percent = grandTotal ? Math.round((item.value / grandTotal) * 100) : 0;
+          return `<li><i style="background:${item.color}"></i>${item.label}: ${item.value} (${percent}%)</li>`;
+        })
+        .join("");
+
+      el.pieWrap.innerHTML = `
+        <div class="chart-layout">
+          <svg viewBox="0 0 260 260" class="pie-svg" aria-label="Carta pai jenis bahan">
+            <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${only.color}"></circle>
+            <circle cx="${cx}" cy="${cy}" r="38" fill="#fdfefe"></circle>
+          </svg>
+          <ul class="chart-legend">${legendSingle}</ul>
+        </div>
+      `;
+      return;
+    }
+
+    const slices = positiveItems
       .map((item) => {
         const angle = (item.value / grandTotal) * Math.PI * 2;
         const endAngle = startAngle + angle;
@@ -444,8 +529,107 @@
       <div class="chart-layout">
         <svg viewBox="0 0 260 260" class="pie-svg" aria-label="Carta pai jenis bahan">
           ${slices}
+          <circle cx="${cx}" cy="${cy}" r="38" fill="#fdfefe"></circle>
         </svg>
         <ul class="chart-legend">${legend}</ul>
+      </div>
+    `;
+  }
+
+  function renderLanguageBars(records) {
+    const rows = LANGUAGE_KEYS.map(([key, label], index) => ({
+      label,
+      value: records.reduce((sum, row) => sum + Number(row[key] || 0), 0),
+      color: BAR_COLORS[index % BAR_COLORS.length],
+    }));
+    const maxValue = Math.max(...rows.map((r) => r.value), 0);
+    if (!maxValue) {
+      el.languageWrap.innerHTML = '<p class="empty">Semua nilai bahasa adalah 0.</p>';
+      return;
+    }
+
+    const width = 760;
+    const left = 210;
+    const right = 24;
+    const top = 18;
+    const rowHeight = 44;
+    const bottom = 16;
+    const plotWidth = width - left - right;
+    const height = top + bottom + rows.length * rowHeight;
+
+    const bars = rows
+      .map((row, i) => {
+        const y = top + i * rowHeight;
+        const w = (row.value / maxValue) * plotWidth;
+        return `
+          <text x="${left - 8}" y="${y + 22}" text-anchor="end" class="axis-label axis-label-name">${escapeHtml(
+          row.label
+        )}</text>
+          <rect x="${left}" y="${y + 6}" width="${w}" height="24" fill="${row.color}" rx="4" ry="4"></rect>
+          <text x="${left + w - 8}" y="${y + 23}" text-anchor="end" class="axis-label axis-label-light">${row.value}</text>
+        `;
+      })
+      .join("");
+
+    el.languageWrap.innerHTML = `
+      <div class="bar-scroll">
+        <svg viewBox="0 0 ${width} ${height}" class="bar-svg" aria-label="Carta bar pilihan bahasa">
+          ${bars}
+        </svg>
+      </div>
+    `;
+  }
+
+  function renderTingkatanBars(records) {
+    const totals = new Map(TINGKATAN_ORDER.map((code) => [code, 0]));
+    records.forEach((row) => {
+      const tingkatan = classToTingkatan(row.kelas);
+      if (!totals.has(tingkatan)) {
+        return;
+      }
+      totals.set(tingkatan, totals.get(tingkatan) + Number(row.jumlah_aktiviti || 0));
+    });
+    const rows = TINGKATAN_ORDER.map((code) => ({
+      code,
+      label: code === "PER" ? "PER" : `T${code}`,
+      value: totals.get(code) || 0,
+    }));
+    const maxValue = Math.max(...rows.map((r) => r.value), 0);
+    if (!maxValue) {
+      el.tingkatanWrap.innerHTML = '<p class="empty">Tiada jumlah bacaan ikut tingkatan.</p>';
+      return;
+    }
+
+    const width = 520;
+    const height = 280;
+    const left = 52;
+    const right = 20;
+    const top = 18;
+    const bottom = 42;
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const barWidth = Math.floor((plotWidth - 30) / rows.length);
+    const gap = Math.max(6, Math.floor((plotWidth - barWidth * rows.length) / (rows.length - 1)));
+
+    const bars = rows
+      .map((row, i) => {
+        const h = maxValue ? (row.value / maxValue) * plotHeight : 0;
+        const x = left + i * (barWidth + gap);
+        const y = top + (plotHeight - h);
+        return `
+          <rect x="${x}" y="${y}" width="${barWidth}" height="${h}" fill="#8d28b8" rx="4" ry="4"></rect>
+          <text x="${x + barWidth / 2}" y="${Math.max(14, y - 4)}" text-anchor="middle" class="axis-label">${row.value}</text>
+          <text x="${x + barWidth / 2}" y="${top + plotHeight + 16}" text-anchor="middle" class="axis-label">${row.label}</text>
+        `;
+      })
+      .join("");
+
+    el.tingkatanWrap.innerHTML = `
+      <div class="bar-scroll">
+        <svg viewBox="0 0 ${width} ${height}" class="bar-svg" aria-label="Carta jumlah bacaan mengikut tingkatan">
+          <line x1="${left}" y1="${top + plotHeight}" x2="${width - right}" y2="${top + plotHeight}" stroke="#9bb7bf" />
+          ${bars}
+        </svg>
       </div>
     `;
   }
@@ -455,50 +639,56 @@
     records.forEach((row) => {
       const key = String(row.no_kad_pengenalan || row.nama || "").trim();
       const nama = String(row.nama || "").trim();
+      const kelas = String(row.kelas || "").trim();
       const jumlah = Number.isFinite(Number(row.jumlah_aktiviti))
         ? Number(row.jumlah_aktiviti)
         : Number(row.bahasa_melayu || 0) + Number(row.bahasa_inggeris || 0) + Number(row.lain_lain_bahasa || 0);
 
       if (!totalsByStudent.has(key)) {
-        totalsByStudent.set(key, { nama, jumlah: 0 });
+        totalsByStudent.set(key, { nama, kelas, jumlah: 0 });
       }
       const current = totalsByStudent.get(key);
+      if (!current.kelas && kelas) {
+        current.kelas = kelas;
+      }
       current.jumlah += Math.max(0, Math.trunc(jumlah || 0));
     });
 
     const rows = [...totalsByStudent.values()]
       .map((row) => ({
         nama: String(row.nama || "").trim(),
+        kelas: String(row.kelas || "").trim(),
         jumlah: Math.max(0, Math.trunc(Number(row.jumlah) || 0)),
       }))
       .sort((a, b) => b.jumlah - a.jumlah)
       .slice(0, 10);
 
+    if (!rows.length) {
+      el.barWrap.innerHTML = '<p class="empty">Tiada data jumlah bacaan.</p>';
+      return;
+    }
+
     const maxValue = Math.max(...rows.map((r) => r.jumlah), 1);
     const maxNameLen = Math.max(...rows.map((r) => r.nama.length), 1);
-    const chartHeight = Math.max(260, 150 + maxNameLen * 7);
-    const barWidth = 22;
-    const gap = 10;
-    const left = 40;
-    const right = 20;
-    const top = 20;
-    const bottom = Math.max(120, 24 + maxNameLen * 7);
-    const plotHeight = chartHeight - top - bottom;
-    const plotWidth = rows.length * (barWidth + gap);
-    const width = Math.max(620, left + plotWidth + right);
+    const rowHeight = 28;
+    const left = Math.min(460, Math.max(190, 9 * maxNameLen));
+    const right = 48;
+    const top = 18;
+    const bottom = 24;
+    const width = 960;
+    const plotWidth = width - left - right;
+    const chartHeight = top + bottom + rows.length * rowHeight;
 
     const bars = rows
       .map((row, i) => {
-        const h = (row.jumlah / maxValue) * plotHeight;
-        const x = left + i * (barWidth + gap);
-        const y = top + (plotHeight - h);
-        const fullName = escapeHtml(row.nama);
+        const y = top + i * rowHeight;
+        const w = maxValue ? (row.jumlah / maxValue) * plotWidth : 0;
+        const fullName = escapeHtml(row.kelas ? `${row.nama} (${row.kelas})` : row.nama);
         const barColor = BAR_COLORS[i % BAR_COLORS.length];
-        const labelY = top + plotHeight + 16;
         return `
-          <rect x="${x}" y="${y}" width="${barWidth}" height="${h}" fill="${barColor}"></rect>
-          <text x="${x + barWidth / 2}" y="${top + plotHeight + 12}" text-anchor="middle" class="axis-label">${row.jumlah}</text>
-          <text x="${x + barWidth / 2}" y="${labelY}" text-anchor="start" class="axis-label" transform="rotate(90 ${x + barWidth / 2} ${labelY})">${fullName}</text>
+          <text x="${left - 8}" y="${y + 18}" text-anchor="end" class="axis-label axis-label-name">${fullName}</text>
+          <rect x="${left}" y="${y + 4}" width="${w}" height="18" fill="${barColor}" rx="4" ry="4"></rect>
+          <text x="${left + w + 6}" y="${y + 18}" text-anchor="start" class="axis-label">${row.jumlah}</text>
         `;
       })
       .join("");
@@ -506,11 +696,128 @@
     el.barWrap.innerHTML = `
       <div class="bar-scroll">
         <svg viewBox="0 0 ${width} ${chartHeight}" class="bar-svg" aria-label="Carta bar jumlah bacaan">
-          <line x1="${left}" y1="${top + plotHeight}" x2="${width - right}" y2="${top + plotHeight}" stroke="#9bb7bf" />
+          <line x1="${left}" y1="${top - 2}" x2="${left}" y2="${chartHeight - bottom + 2}" stroke="#c2d2d8" />
           ${bars}
         </svg>
       </div>
     `;
+  }
+
+  function renderClassHeatmap(records) {
+    const classes = [...new Set(records.map((row) => String(row.kelas || "").trim()).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, "ms")
+    );
+    if (!classes.length) {
+      el.heatmapWrap.innerHTML = '<p class="empty">Tiada data kelas.</p>';
+      return;
+    }
+
+    const rowCodes = TINGKATAN_ORDER.filter((code) =>
+      records.some((row) => classToTingkatan(row.kelas) === code)
+    );
+    const matrix = new Map();
+    rowCodes.forEach((code) => matrix.set(code, new Map(classes.map((kelas) => [kelas, 0]))));
+
+    records.forEach((row) => {
+      const code = classToTingkatan(row.kelas);
+      const kelas = String(row.kelas || "").trim();
+      if (!matrix.has(code) || !kelas) {
+        return;
+      }
+      const rowMap = matrix.get(code);
+      rowMap.set(kelas, (rowMap.get(kelas) || 0) + Number(row.jumlah_aktiviti || 0));
+    });
+
+    const maxValue = Math.max(
+      ...rowCodes.flatMap((code) => classes.map((kelas) => matrix.get(code).get(kelas) || 0)),
+      0
+    );
+    const classTotals = new Map(classes.map((kelas) => [kelas, 0]));
+
+    const bodyRows = rowCodes
+      .map((code) => {
+        const rowMap = matrix.get(code);
+        let rowTotal = 0;
+        const tds = classes
+          .map((kelas) => {
+            const value = rowMap.get(kelas) || 0;
+            rowTotal += value;
+            classTotals.set(kelas, (classTotals.get(kelas) || 0) + value);
+            const shade = maxValue ? 0.18 + (value / maxValue) * 0.52 : 0;
+            const bg = value ? ` style="background: rgba(83, 151, 238, ${shade.toFixed(3)});"` : "";
+            return `<td${bg}>${value}</td>`;
+          })
+          .join("");
+        const label = code === "PER" ? "PER" : `T${code}`;
+        return `<tr><td>${label}</td>${tds}<td><strong>${rowTotal}</strong></td></tr>`;
+      })
+      .join("");
+
+    const allTotal = [...classTotals.values()].reduce((sum, value) => sum + value, 0);
+    const footerCells = classes
+      .map((kelas) => `<td><strong>${classTotals.get(kelas) || 0}</strong></td>`)
+      .join("");
+
+    el.heatmapWrap.innerHTML = `
+      <table class="heatmap-table">
+        <thead>
+          <tr>
+            <th>Tingkatan</th>
+            ${classes.map((kelas) => `<th>${escapeHtml(kelas)}</th>`).join("")}
+            <th>Grand Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bodyRows}
+          <tr>
+            <td><strong>JUMLAH</strong></td>
+            ${footerCells}
+            <td><strong>${allTotal}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  }
+
+  function classToTingkatan(kelasValue) {
+    const kelas = String(kelasValue || "").trim().toUpperCase();
+    if (!kelas) {
+      return "";
+    }
+    if (kelas.startsWith("PER")) {
+      return "PER";
+    }
+    const match = kelas.match(/^([1-5])/);
+    return match ? match[1] : "";
+  }
+
+  function filterClassesByTingkatan(classes, selectedTingkatan) {
+    if (selectedTingkatan === "__all__") {
+      return [...classes];
+    }
+    return classes.filter((kelas) => classToTingkatan(kelas) === selectedTingkatan);
+  }
+
+  function getMostRecentMonthText(records, year, selectedMonth) {
+    if (selectedMonth && selectedMonth !== "__year__") {
+      return selectedMonth;
+    }
+    const currentYear = String(new Date().getFullYear());
+    if (String(year) === currentYear) {
+      return MONTHS[new Date().getMonth()];
+    }
+    const monthIndexes = records
+      .filter((row) => String(row.tahun || "") === String(year))
+      .map((row) => MONTHS.indexOf(String(row.bulan || "")))
+      .filter((index) => index >= 0);
+    if (!monthIndexes.length) {
+      return MONTHS[new Date().getMonth()];
+    }
+    return MONTHS[Math.max(...monthIndexes)];
+  }
+
+  function getSehinggaLabel(records, year) {
+    return `Sehingga ${getMostRecentMonthText(records, year, "__year__")}`;
   }
 
   function escapeHtml(value) {

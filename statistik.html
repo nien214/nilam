@@ -26,6 +26,9 @@
       <label for="statBulan">Bulan</label>
       <select id="statBulan" name="statBulan"></select>
 
+      <label for="statTingkatan">Tingkatan</label>
+      <select id="statTingkatan" name="statTingkatan"></select>
+
       <label for="statKelas">Kelas</label>
       <select id="statKelas" name="statKelas"></select>
     </section>
@@ -47,14 +50,31 @@
 
     <section class="stats-grid">
       <article class="card">
-        <h2 id="pieTitle">Jenis Bahan Dibaca (Semua Kelas / Sepanjang Tahun)</h2>
+        <h2 id="pieTitle">Analisis Bacaan Mengikut Jenis Bahan</h2>
         <div id="pieWrap" class="chart-wrap"></div>
       </article>
 
       <article class="card">
-        <h2 id="barTitle">Jumlah Bacaan Murid (Semua Kelas / Sepanjang Tahun)</h2>
+        <h2 id="languageTitle">Pilihan Bahasa</h2>
+        <div id="languageWrap" class="chart-wrap"></div>
+      </article>
+    </section>
+
+    <section class="stats-grid">
+      <article class="card">
+        <h2 id="tingkatanTitle">Analisis Jumlah Bacaan Mengikut Tingkatan</h2>
+        <div id="tingkatanWrap" class="chart-wrap"></div>
+      </article>
+
+      <article class="card">
+        <h2 id="barTitle">Jumlah Bacaan Murid Tertinggi sehingga Bulan Terkini</h2>
         <div id="barWrap" class="chart-wrap"></div>
       </article>
+    </section>
+
+    <section class="card">
+      <h2 id="heatmapTitle">Analisis Jumlah Bacaan Mengikut Kelas</h2>
+      <div id="heatmapWrap" class="table-wrap"></div>
     </section>
   </main>
 

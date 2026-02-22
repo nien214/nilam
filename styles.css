@@ -89,8 +89,36 @@ label {
 #tahun,
 #statTahun,
 #statBulan,
+#statTingkatan,
 #statKelas {
   width: 92px;
+}
+
+#statTahun {
+  width: 8ch;
+  min-width: 8ch;
+}
+
+#statBulan {
+  width: 20ch;
+  min-width: 20ch;
+}
+
+#statTingkatan {
+  width: 18ch;
+  min-width: 18ch;
+}
+
+#statKelas {
+  width: 14ch;
+  min-width: 14ch;
+}
+
+.controls #statTahun,
+.controls #statBulan,
+.controls #statTingkatan,
+.controls #statKelas {
+  flex: 0 0 auto;
 }
 
 label[for="kelas"] {
@@ -466,6 +494,32 @@ td:nth-child(11) {
 .axis-label {
   fill: #36535c;
   font-size: 9px;
+}
+
+.axis-label-name {
+  font-size: 10px;
+}
+
+.axis-label-light {
+  fill: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.heatmap-table {
+  min-width: 920px;
+}
+
+.heatmap-table th,
+.heatmap-table td {
+  text-align: center;
+  padding: 0.38rem 0.32rem;
+}
+
+.heatmap-table th:first-child,
+.heatmap-table td:first-child {
+  text-align: left;
+  min-width: 84px;
 }
 
 .modal-backdrop {
