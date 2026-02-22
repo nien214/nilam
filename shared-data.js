@@ -31,25 +31,42 @@
     return String(value || "").trim();
   }
 
-  function getStudents() {
-    let raw = [];
+  async function getStudents(config) {
+    const selectedYear = String(new Date().getFullYear());
+    let localRaw = [];
     const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
         const parsed = JSON.parse(overrideRaw);
         if (Array.isArray(parsed)) {
-          raw = parsed;
+          localRaw = parsed;
         }
       } catch (error) {
         console.error("Gagal parse namelist override", error);
       }
     }
 
-    if (!raw.length) {
-      raw = Array.isArray(window.NILAM_STUDENTS) ? window.NILAM_STUDENTS : [];
+    if (!localRaw.length) {
+      localRaw = Array.isArray(window.NILAM_STUDENTS) ? window.NILAM_STUDENTS : [];
     }
 
-    return raw
+    const localStudents = normalizeStudents(localRaw);
+
+    try {
+      const supabaseStudents = await getSupabaseStudents(config, selectedYear);
+      const normalizedSupabase = normalizeStudents(supabaseStudents);
+      if (normalizedSupabase.length) {
+        return mergeStudentsByNoKad(normalizedSupabase, localStudents);
+      }
+    } catch (error) {
+      console.error("Gagal muat senarai murid dari Supabase", error);
+    }
+
+    return localStudents;
+  }
+
+  function normalizeStudents(raw) {
+    return (Array.isArray(raw) ? raw : [])
       .map((row) => ({
         nama: normalizeText(row.nama),
         kelas: normalizeText(row.kelas),
@@ -58,6 +75,39 @@
         email_google_classroom: normalizeText(row.email_google_classroom),
       }))
       .filter((row) => row.nama && row.kelas);
+  }
+
+  function mergeStudentsByNoKad(primary, fallback) {
+    const byNoKad = new Map();
+    const byNameClass = new Set();
+
+    primary.forEach((row) => {
+      const noKad = normalizeText(row.no_kad_pengenalan);
+      const key = `${normalizeText(row.nama).toLowerCase()}|${normalizeText(row.kelas).toLowerCase()}`;
+      if (noKad) {
+        byNoKad.set(noKad, row);
+      } else if (!byNameClass.has(key)) {
+        byNameClass.add(key);
+        byNoKad.set(`__${key}`, row);
+      }
+    });
+
+    fallback.forEach((row) => {
+      const noKad = normalizeText(row.no_kad_pengenalan);
+      const key = `${normalizeText(row.nama).toLowerCase()}|${normalizeText(row.kelas).toLowerCase()}`;
+      if (noKad) {
+        if (!byNoKad.has(noKad)) {
+          byNoKad.set(noKad, row);
+        }
+        return;
+      }
+      if (!byNameClass.has(key)) {
+        byNameClass.add(key);
+        byNoKad.set(`__${key}`, row);
+      }
+    });
+
+    return [...byNoKad.values()];
   }
 
   function getStudentsByClass(students) {
@@ -199,9 +249,51 @@
     return rows.map(normalizeRecord);
   }
 
+  async function getSupabaseStudents(config, year) {
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return [];
+    }
+
+    const safeYear = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+    const kelasField = `kelas_${safeYear}`;
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const params = new URLSearchParams({
+      select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField}`,
+      order: "nama_murid.asc",
+      limit: "50000",
+    });
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_students?${params.toString()}`;
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Ralat muat senarai murid Supabase (${response.status}): ${detail}`);
+    }
+
+    const rows = await response.json();
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+
+    return rows.map((row) => ({
+      nama: normalizeText(row.nama_murid),
+      kelas: normalizeText(row[kelasField]),
+      no_kad_pengenalan: normalizeText(row.no_kad_pengenalan),
+      jantina: normalizeText(row.jantina),
+      email_google_classroom: normalizeText(row.email_google_classroom),
+    }));
+  }
+
   async function loadAllData() {
     const config = window.NILAM_CONFIG || {};
-    const students = getStudents();
+    const students = await getStudents(config);
     const studentsByClass = getStudentsByClass(students);
 
     const localRecords = getLocalRecords();

@@ -491,31 +491,39 @@
   }
 
   async function loadStudents() {
-    let hardcoded = [];
+    const config = window.NILAM_CONFIG || {};
+    const selectedYear = String(new Date().getFullYear());
+    let localStudents = [];
     const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
         const parsed = JSON.parse(overrideRaw);
         if (Array.isArray(parsed)) {
-          hardcoded = parsed;
+          localStudents = parsed;
         }
       } catch (error) {
         console.error("Gagal parse namelist override", error);
       }
     }
 
-    if (!hardcoded.length) {
-      hardcoded = Array.isArray(window.NILAM_STUDENTS) ? window.NILAM_STUDENTS : [];
+    if (!localStudents.length) {
+      localStudents = Array.isArray(window.NILAM_STUDENTS) ? window.NILAM_STUDENTS : [];
     }
 
-    if (hardcoded.length) {
-      return hardcoded
-        .map((row) => ({
-          nama: String(row.nama || "").trim(),
-          kelas: String(row.kelas || "").trim(),
-          no_kad_pengenalan: String(row.no_kad_pengenalan || "").trim(),
-        }))
-        .filter((row) => row.nama && row.kelas);
+    const normalizedLocal = normalizeStudents(localStudents);
+
+    try {
+      const supabaseStudents = await loadStudentsFromSupabase(config, selectedYear);
+      const normalizedSupabase = normalizeStudents(supabaseStudents);
+      if (normalizedSupabase.length) {
+        return mergeStudentsByNoKad(normalizedSupabase, normalizedLocal);
+      }
+    } catch (error) {
+      console.error("Gagal muat senarai murid dari Supabase", error);
+    }
+
+    if (normalizedLocal.length) {
+      return normalizedLocal;
     }
 
     const response = await fetch(CSV_FILE);
@@ -534,7 +542,99 @@
         kelas: getCsvValueByColumn(row, kelasColumn),
         no_kad_pengenalan: getCsvValueByColumn(row, noKadColumn),
       }))
+      .filter((row) => row.nama && row.kelas)
+      .map((row) => ({
+        nama: String(row.nama || "").trim(),
+        kelas: String(row.kelas || "").trim(),
+        no_kad_pengenalan: String(row.no_kad_pengenalan || "").trim(),
+      }));
+  }
+
+  async function loadStudentsFromSupabase(config, year) {
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return [];
+    }
+
+    const safeYear = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+    const kelasField = `kelas_${safeYear}`;
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const params = new URLSearchParams({
+      select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField}`,
+      order: "nama_murid.asc",
+      limit: "50000",
+    });
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_students?${params.toString()}`;
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Ralat muat nilam_students (${response.status}): ${detail}`);
+    }
+
+    const rows = await response.json();
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+
+    return rows.map((row) => ({
+      nama: String(row.nama_murid || "").trim(),
+      kelas: String(row[kelasField] || "").trim(),
+      no_kad_pengenalan: String(row.no_kad_pengenalan || "").trim(),
+      jantina: String(row.jantina || "").trim(),
+      email_google_classroom: String(row.email_google_classroom || "").trim(),
+    }));
+  }
+
+  function normalizeStudents(students) {
+    if (!Array.isArray(students)) {
+      return [];
+    }
+    return students
+      .map((row) => ({
+        nama: String(row.nama || "").trim(),
+        kelas: String(row.kelas || "").trim(),
+        no_kad_pengenalan: String(row.no_kad_pengenalan || "").trim(),
+      }))
       .filter((row) => row.nama && row.kelas);
+  }
+
+  function mergeStudentsByNoKad(primary, fallback) {
+    const byNoKad = new Map();
+    const byNameClass = new Set();
+
+    primary.forEach((row) => {
+      const noKad = String(row.no_kad_pengenalan || "").trim();
+      const key = `${row.nama.toLowerCase()}|${row.kelas.toLowerCase()}`;
+      if (noKad) {
+        byNoKad.set(noKad, row);
+      } else if (!byNameClass.has(key)) {
+        byNameClass.add(key);
+        byNoKad.set(`__${key}`, row);
+      }
+    });
+
+    fallback.forEach((row) => {
+      const noKad = String(row.no_kad_pengenalan || "").trim();
+      const key = `${row.nama.toLowerCase()}|${row.kelas.toLowerCase()}`;
+      if (noKad) {
+        if (!byNoKad.has(noKad)) {
+          byNoKad.set(noKad, row);
+        }
+        return;
+      }
+      if (!byNameClass.has(key)) {
+        byNameClass.add(key);
+        byNoKad.set(`__${key}`, row);
+      }
+    });
+
+    return [...byNoKad.values()];
   }
 
   function parseCsv(content) {
