@@ -16,4 +16,6 @@ Borang ini:
 5. Push semua fail ke repo dan hidupkan GitHub Pages.
 
 ## Fallback
-Jika `config.js` kosong atau request Supabase gagal, rekod disimpan ke `localStorage` browser dan boleh dimuat turun melalui butang `Muat Turun CSV`.
+Jika `config.js` kosong atau request Supabase gagal, rekod disimpan ke `localStorage` browser (setiap peranti berasingan).
+
+Jika anda kemudian isi `config.js` dengan Supabase, aplikasi akan auto-sync rekod local ke cloud semasa halaman dibuka.

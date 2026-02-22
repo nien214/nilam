@@ -55,6 +55,27 @@
     try {
       const students = await loadStudents();
       hydrateStudents(students);
+      const syncResult = await autoSyncLocalRecordsToSupabase();
+      if (syncResult.mode === "local_only") {
+        setStatus(
+          `Data murid berjaya dimuatkan: ${students.length} murid. Simpanan merentas peranti belum aktif (isi config.js Supabase).`,
+          true
+        );
+        return;
+      }
+      if (syncResult.mode === "cloud_error") {
+        setStatus(
+          `Data murid berjaya dimuatkan: ${students.length} murid. Sync cloud gagal, semak config.js / Supabase.`,
+          true
+        );
+        return;
+      }
+      if (syncResult.syncedCount > 0) {
+        setStatus(
+          `Data murid berjaya dimuatkan: ${students.length} murid. ${syncResult.syncedCount} rekod local telah disegerakkan ke cloud.`
+        );
+        return;
+      }
       setStatus(`Data murid berjaya dimuatkan: ${students.length} murid.`);
     } catch (error) {
       setStatus("Gagal memuatkan data murid. Semak `students-data.js` atau fail CSV.", true);
@@ -615,6 +636,128 @@
       .toLowerCase()
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  async function autoSyncLocalRecordsToSupabase() {
+    const config = window.NILAM_CONFIG || {};
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return { mode: "local_only", syncedCount: 0 };
+    }
+
+    const payload = collectLocalRecordsForSync();
+    if (!payload.length) {
+      return { mode: "cloud_ready", syncedCount: 0 };
+    }
+
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,no_kad_pengenalan`;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${config.supabaseAnonKey}`,
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`Ralat sync local->Supabase (${response.status}): ${detail}`);
+      }
+      return { mode: "cloud_ready", syncedCount: payload.length };
+    } catch (error) {
+      console.error(error);
+      return { mode: "cloud_error", syncedCount: 0 };
+    }
+  }
+
+  function collectLocalRecordsForSync() {
+    const dedup = new Map();
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith("nilam_records_")) {
+        continue;
+      }
+      const meta = parseLocalStorageRecordKey(key);
+      const parsed = parseStoredRecords(localStorage.getItem(key));
+      parsed.forEach((row, index) => {
+        const normalized = normalizeRecordForCloud(row, meta, index + 1);
+        if (!normalized) {
+          return;
+        }
+        dedup.set(
+          `${normalized.tahun}|${normalized.bulan}|${normalized.no_kad_pengenalan}`,
+          normalized
+        );
+      });
+    }
+    return [...dedup.values()];
+  }
+
+  function parseLocalStorageRecordKey(key) {
+    const match = String(key || "").match(/^nilam_records_(\d{4})_(.+?)_(.+)$/);
+    if (match) {
+      return { tahun: match[1], bulan: match[2], kelas: match[3] };
+    }
+    const legacyMatch = String(key || "").match(/^nilam_records_(.+?)_(.+)$/);
+    if (legacyMatch) {
+      return { tahun: "", bulan: legacyMatch[1], kelas: legacyMatch[2] };
+    }
+    return { tahun: "", bulan: "", kelas: "" };
+  }
+
+  function normalizeRecordForCloud(row, meta, bilFallback) {
+    const noKad = String(row?.no_kad_pengenalan || "").trim();
+    const tahun = String(row?.tahun || meta.tahun || "").trim();
+    const bulan = String(row?.bulan || meta.bulan || "").trim();
+    const kelas = String(row?.kelas || meta.kelas || "").trim();
+    const nama = String(row?.nama || "").trim();
+    if (!noKad || !tahun || !bulan || !kelas || !nama) {
+      return null;
+    }
+
+    const bahanDigital = clampNilamNumber(row?.bahan_digital);
+    const bahanBukanBuku = clampNilamNumber(row?.bahan_bukan_buku);
+    const fiksyen = clampNilamNumber(row?.fiksyen);
+    const bukanFiksyen = clampNilamNumber(row?.bukan_fiksyen);
+    const bahasaMelayu = clampNilamNumber(row?.bahasa_melayu);
+    const bahasaInggeris = clampNilamNumber(row?.bahasa_inggeris);
+    const lainLainBahasa = clampNilamNumber(row?.lain_lain_bahasa);
+    const jumlahAsal = Number(row?.jumlah_aktiviti);
+    const jumlahAktiviti = Number.isFinite(jumlahAsal)
+      ? clampNilamNumber(jumlahAsal, 2997)
+      : bahasaMelayu + bahasaInggeris + lainLainBahasa;
+    const bilFromRow = Number(row?.bil);
+    const bil = Number.isFinite(bilFromRow) && bilFromRow > 0 ? Math.trunc(bilFromRow) : bilFallback;
+
+    return {
+      no_kad_pengenalan: noKad,
+      tahun,
+      bulan,
+      bil,
+      nama,
+      kelas,
+      bahan_digital: bahanDigital,
+      bahan_bukan_buku: bahanBukanBuku,
+      fiksyen,
+      bukan_fiksyen: bukanFiksyen,
+      bahasa_melayu: bahasaMelayu,
+      bahasa_inggeris: bahasaInggeris,
+      lain_lain_bahasa: lainLainBahasa,
+      jumlah_aktiviti: jumlahAktiviti,
+      updated_at_client: row?.updated_at_client || new Date().toISOString(),
+    };
+  }
+
+  function clampNilamNumber(value, max = 999) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(max, Math.trunc(number)));
   }
 
   function setStatus(message, isError) {
