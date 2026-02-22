@@ -513,3 +513,24 @@ td:nth-child(11) {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #studentTable {
+    min-width: 980px;
+  }
+
+  #studentTable th:nth-child(2),
+  #studentTable td:nth-child(2) {
+    width: 34ch;
+  }
+
+  #studentTable th:nth-child(n + 3),
+  #studentTable td:nth-child(n + 3) {
+    width: calc((100% - 38ch) / 9);
+  }
+}
