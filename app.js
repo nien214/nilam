@@ -65,7 +65,9 @@
       }
       if (syncResult.mode === "cloud_error") {
         setStatus(
-          `Data murid berjaya dimuatkan: ${students.length} murid. Sync cloud gagal, semak config.js / Supabase.`,
+          `Data murid berjaya dimuatkan: ${students.length} murid. Sync cloud gagal: ${String(
+            syncResult.errorMessage || "semak config.js / Supabase"
+          ).slice(0, 220)}`,
           true
         );
         return;
@@ -676,7 +678,11 @@
       return { mode: "cloud_ready", syncedCount: payload.length };
     } catch (error) {
       console.error(error);
-      return { mode: "cloud_error", syncedCount: 0 };
+      return {
+        mode: "cloud_error",
+        syncedCount: 0,
+        errorMessage: String(error?.message || "ralat tidak diketahui"),
+      };
     }
   }
 
