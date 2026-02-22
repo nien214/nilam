@@ -317,6 +317,8 @@
     const endpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,no_kad_pengenalan`;
 
     try {
+      await ensureStudentsExistInSupabase(records, config);
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -339,7 +341,9 @@
       console.error(error);
       saveLocal(records);
       setStatus(
-        "Simpanan ke Supabase gagal. Rekod disimpan dalam localStorage sebagai sandaran.",
+        `Simpanan ke Supabase gagal. Rekod disimpan dalam localStorage sebagai sandaran. (${String(
+          error.message || "ralat tidak diketahui"
+        ).slice(0, 180)})`,
         true
       );
     }
@@ -653,6 +657,8 @@
     const endpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,no_kad_pengenalan`;
 
     try {
+      await ensureStudentsExistInSupabase(payload, config);
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -758,6 +764,48 @@
       return 0;
     }
     return Math.max(0, Math.min(max, Math.trunc(number)));
+  }
+
+  async function ensureStudentsExistInSupabase(records, config) {
+    if (!Array.isArray(records) || !records.length) {
+      return;
+    }
+
+    const byNoKad = new Map();
+    records.forEach((row) => {
+      const noKad = String(row?.no_kad_pengenalan || "").trim();
+      const nama = String(row?.nama || "").trim();
+      if (!noKad || !nama) {
+        return;
+      }
+      byNoKad.set(noKad, {
+        no_kad_pengenalan: noKad,
+        nama_murid: nama,
+      });
+    });
+
+    const payload = [...byNoKad.values()];
+    if (!payload.length) {
+      return;
+    }
+
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_students?on_conflict=no_kad_pengenalan`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Ralat sync nilam_students (${response.status}): ${detail}`);
+    }
   }
 
   function setStatus(message, isError) {
