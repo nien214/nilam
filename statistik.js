@@ -542,40 +542,70 @@
       value: records.reduce((sum, row) => sum + Number(row[key] || 0), 0),
       color: BAR_COLORS[index % BAR_COLORS.length],
     }));
-    const maxValue = Math.max(...rows.map((r) => r.value), 0);
-    if (!maxValue) {
+    const grandTotal = rows.reduce((sum, row) => sum + row.value, 0);
+    if (!grandTotal) {
       el.languageWrap.innerHTML = '<p class="empty">Semua nilai bahasa adalah 0.</p>';
       return;
     }
 
-    const width = 760;
-    const left = 210;
-    const right = 24;
-    const top = 18;
-    const rowHeight = 44;
-    const bottom = 16;
-    const plotWidth = width - left - right;
-    const height = top + bottom + rows.length * rowHeight;
+    let startAngle = -Math.PI / 2;
+    const cx = 130;
+    const cy = 130;
+    const radius = 90;
+    const positiveItems = rows.filter((item) => item.value > 0);
 
-    const bars = rows
+    if (positiveItems.length === 1) {
+      const only = positiveItems[0];
+      const legendSingle = rows
+        .map((item) => {
+          const percent = grandTotal ? Math.round((item.value / grandTotal) * 100) : 0;
+          return `<li><i style="background:${item.color}"></i>${item.label}: ${item.value} (${percent}%)</li>`;
+        })
+        .join("");
+
+      el.languageWrap.innerHTML = `
+        <div class="chart-layout">
+          <svg viewBox="0 0 260 260" class="pie-svg" aria-label="Carta donut pilihan bahasa">
+            <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${only.color}"></circle>
+            <circle cx="${cx}" cy="${cy}" r="38" fill="#fdfefe"></circle>
+          </svg>
+          <ul class="chart-legend">${legendSingle}</ul>
+        </div>
+      `;
+      return;
+    }
+
+    const slices = positiveItems
       .map((row, i) => {
-        const y = top + i * rowHeight;
-        const w = (row.value / maxValue) * plotWidth;
+        const angle = (row.value / grandTotal) * Math.PI * 2;
+        const endAngle = startAngle + angle;
+        const x1 = cx + radius * Math.cos(startAngle);
+        const y1 = cy + radius * Math.sin(startAngle);
+        const x2 = cx + radius * Math.cos(endAngle);
+        const y2 = cy + radius * Math.sin(endAngle);
+        const largeArc = angle > Math.PI ? 1 : 0;
+        const path = `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+        startAngle = endAngle;
         return `
-          <text x="${left - 8}" y="${y + 22}" text-anchor="end" class="axis-label axis-label-name">${escapeHtml(
-          row.label
-        )}</text>
-          <rect x="${left}" y="${y + 6}" width="${w}" height="24" fill="${row.color}" rx="4" ry="4"></rect>
-          <text x="${left + w - 8}" y="${y + 23}" text-anchor="end" class="axis-label axis-label-light">${row.value}</text>
+          <path d="${path}" fill="${row.color}"></path>
         `;
       })
       .join("");
 
+    const legend = rows
+      .map((item) => {
+        const percent = grandTotal ? Math.round((item.value / grandTotal) * 100) : 0;
+        return `<li><i style="background:${item.color}"></i>${item.label}: ${item.value} (${percent}%)</li>`;
+      })
+      .join("");
+
     el.languageWrap.innerHTML = `
-      <div class="bar-scroll">
-        <svg viewBox="0 0 ${width} ${height}" class="bar-svg" aria-label="Carta bar pilihan bahasa">
-          ${bars}
+      <div class="chart-layout">
+        <svg viewBox="0 0 260 260" class="pie-svg" aria-label="Carta donut pilihan bahasa">
+          ${slices}
+          <circle cx="${cx}" cy="${cy}" r="38" fill="#fdfefe"></circle>
         </svg>
+        <ul class="chart-legend">${legend}</ul>
       </div>
     `;
   }
