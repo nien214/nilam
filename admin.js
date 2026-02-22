@@ -414,11 +414,18 @@
       const mergedRecords = mergeRecordsByNoKad(year, month, parsed.records);
       persistLocalRecords(mergedRecords);
       mergeStudentsIntoNamelist(parsed.students);
-      await upsertImportedRecordsToSupabase(parsed.records);
-      await upsertStudentsToSupabase(parsed.students);
+      let syncNote = "";
+      try {
+        await upsertImportedRecordsToSupabase(parsed.records);
+        await upsertStudentsToSupabase(parsed.students);
+        syncNote = " Data juga disimpan ke Supabase.";
+      } catch (syncError) {
+        console.error(syncError);
+        syncNote = " Simpanan Supabase gagal, tetapi data telah disimpan ke local.";
+      }
 
       setStatus(
-        `Import data berjaya: ${parsed.records.length} rekod diproses untuk ${year} ${month}. Data sedia ada telah di-override ikut No. Kad Pengenalan.`
+        `Import data berjaya dan disimpan automatik: ${parsed.records.length} rekod diproses untuk ${year} ${month}. Data sedia ada telah di-override ikut No. Kad Pengenalan.${syncNote}`
       );
     } catch (error) {
       console.error(error);
