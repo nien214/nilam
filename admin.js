@@ -531,7 +531,7 @@
     const namaColumn = resolveColumnName(rows, ["nama murid", "nama"]);
     const jantinaColumn = resolveColumnName(rows, ["jantina"]);
     const noKadColumn = resolveColumnName(rows, ["no. kad pengenalan", "no kad pengenalan"]);
-    const kelasColumn = resolveColumnName(rows, ["kelas 2026", "kelas"]);
+    const kelasColumn = resolveColumnName(rows, ["kelas 2026", "kelas"]) || resolveDynamicKelasColumn(rows);
     const emailColumn = resolveColumnName(rows, ["email id google classroom", "email google classroom", "email"]);
     const bahanDigitalColumn = resolveColumnName(rows, ["bahan digital"]);
     const bahanBukanBukuColumn = resolveColumnName(rows, ["bahan bukan buku"]);
@@ -553,8 +553,9 @@
       !biColumn ||
       !lainColumn
     ) {
+      const availableHeaders = rows.length ? Object.keys(rows[0]).join(", ") : "(tiada header)";
       throw new Error(
-        "Kolum data CSV tidak lengkap. Perlu ada: NAMA MURID, No. Kad Pengenalan, Kelas, Bahan Digital, Bahan Bukan Buku, Fiksyen, Bukan Fiksyen, Bahasa Melayu, Bahasa Inggeris, Lain-lain Bahasa."
+        `Kolum data CSV tidak lengkap. Perlu ada: NAMA MURID, No. Kad Pengenalan, Kelas, Bahan Digital, Bahan Bukan Buku, Fiksyen, Bukan Fiksyen, Bahasa Melayu, Bahasa Inggeris, Lain-lain Bahasa. Header dikesan: ${availableHeaders}`
       );
     }
 
@@ -1008,10 +1009,36 @@
     return "";
   }
 
+  function resolveDynamicKelasColumn(rows) {
+    if (!rows.length) {
+      return "";
+    }
+    const firstRowKeys = Object.keys(rows[0]);
+    const normalized = firstRowKeys.map((key) => ({
+      original: key,
+      normalized: normalizeHeader(key),
+    }));
+
+    const exact = normalized.find((item) => item.normalized === "kelas");
+    if (exact) {
+      return exact.original;
+    }
+
+    const kelasByYear = normalized.find((item) => /^kelas \d{4}$/.test(item.normalized));
+    if (kelasByYear) {
+      return kelasByYear.original;
+    }
+
+    const startsWithKelas = normalized.find((item) => item.normalized.startsWith("kelas "));
+    return startsWithKelas ? startsWithKelas.original : "";
+  }
+
   function normalizeHeader(value) {
     return String(value || "")
       .replace(/^\uFEFF/, "")
       .toLowerCase()
+      .replace(/['’`"]/g, "")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
       .replace(/\s+/g, " ")
       .trim();
   }
