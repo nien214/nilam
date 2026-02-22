@@ -466,7 +466,7 @@
         supabaseMessage = "Data Supabase berjaya dipadam.";
       } catch (error) {
         console.error(error);
-        supabaseMessage = "Padam data Supabase gagal.";
+        supabaseMessage = `Padam data Supabase gagal: ${String(error.message || "ralat tidak diketahui")}`;
       }
     }
 
@@ -475,8 +475,7 @@
 
   async function deleteAllSupabaseData(config) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
-    const monthFilter = MONTHS.map((month) => `bulan.eq.${encodeURIComponent(month)}`).join(",");
-    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?or=(${monthFilter})`;
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?id=gt.0`;
 
     const response = await fetch(endpoint, {
       method: "DELETE",
