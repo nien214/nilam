@@ -354,7 +354,9 @@
 
   async function saveAllRecords() {
     if (!state.selectedClass) {
-      setStatus("Sila pilih kelas dahulu.", true);
+      const message = "Sila pilih kelas dahulu.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
       return;
     }
 
@@ -363,11 +365,14 @@
       records = collectCurrentRows();
     } catch (error) {
       setStatus(error.message, true);
+      showPopupStatus(error.message, true);
       return;
     }
 
     if (!records.length) {
-      setStatus("Tiada rekod untuk disimpan.", true);
+      const message = "Tiada rekod untuk disimpan.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
       return;
     }
 
@@ -378,6 +383,7 @@
         "Rekod disimpan dalam localStorage (fallback). Isi `config.js` untuk simpan ke Supabase."
       );
       showToast("Berjaya disimpan");
+      showPopupStatus("Berjaya disimpan", false);
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
       return;
     }
@@ -407,17 +413,17 @@
       saveLocal(records);
       setStatus(`Berjaya simpan ${records.length} rekod ke Supabase.`);
       showToast("Berjaya disimpan");
+      showPopupStatus("Berjaya disimpan", false);
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     } catch (error) {
       console.error(error);
       saveLocal(records);
-      setStatus(
-        `Simpanan ke Supabase gagal. Rekod disimpan dalam localStorage sebagai sandaran. (${String(
+      const message = `Simpanan ke Supabase gagal. Rekod disimpan dalam localStorage sebagai sandaran. (${String(
           error.message || "ralat tidak diketahui"
-        ).slice(0, 180)})`,
-        true
-      );
+        ).slice(0, 180)})`;
+      setStatus(message, true);
       showToast("Simpanan gagal — disimpan tempatan", true);
+      showPopupStatus("Berjaya disimpan", false);
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     }
   }
@@ -1090,6 +1096,10 @@
   function setStatus(message, isError) {
     el.status.textContent = message;
     el.status.style.color = isError ? "#b00020" : "";
+  }
+
+  function showPopupStatus(message, isError) {
+    window.alert(isError ? String(message || "Operasi gagal.") : "Berjaya disimpan");
   }
 
   let toastTimer = null;

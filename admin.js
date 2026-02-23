@@ -420,9 +420,12 @@
       setStatus(
         `Senarai murid berjaya disimpan: ${toSave.length} murid. Data murid yang dibuang telah dipadam (Local: ${purgeResult.localDeleted}, Supabase: ${purgeResult.supabaseDeleted}).`
       );
+      showPopupStatus("Berjaya disimpan", false);
     } catch (error) {
       console.error(error);
-      setStatus(error.message || "Gagal simpan senarai murid.", true);
+      const message = error.message || "Gagal simpan senarai murid.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
     }
   }
 
@@ -527,9 +530,12 @@
       setStatus(
         `Namelist berjaya diimport: ${namelist.length} murid. Data murid yang dibuang telah dipadam (Local: ${purgeResult.localDeleted}, Supabase: ${purgeResult.supabaseDeleted}).`
       );
+      showPopupStatus("Berjaya disimpan", false);
     } catch (error) {
       console.error(error);
-      setStatus(error.message || "Import namelist gagal.", true);
+      const message = error.message || "Import namelist gagal.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
     }
   }
 
@@ -626,9 +632,12 @@
       setStatus(
         `Import data berjaya dan disimpan automatik: ${parsed.records.length} rekod diproses untuk ${year} ${month}. Data sedia ada telah di-override ikut No. Kad Pengenalan.${syncNote}`
       );
+      showPopupStatus("Berjaya disimpan", false);
     } catch (error) {
       console.error(error);
-      setStatus(error.message || "Import data gagal.", true);
+      const message = error.message || "Import data gagal.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
     } finally {
       state.pendingImportYear = "";
       state.pendingImportMonth = "";
@@ -1184,6 +1193,19 @@
     return deletedCount;
   }
 
+  function parseStoredRecords(raw) {
+    if (!raw) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
+  }
+
   async function purgeSupabaseRecordsByMaster(students, config) {
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
       return 0;
@@ -1411,6 +1433,10 @@
     el.status.style.color = isError ? "#b00020" : "";
   }
 
+  function showPopupStatus(message, isError) {
+    window.alert(isError ? String(message || "Operasi gagal.") : "Berjaya disimpan");
+  }
+
   // ── Undo ──────────────────────────────────────────────────────────────────
 
   function undoRemove() {
@@ -1607,9 +1633,12 @@
       setStatus(
         `Senarai nama dikemas kini: ${finalList.length} murid. Data murid yang dibuang telah dipadam (Local: ${purgeResult.localDeleted}, Supabase: ${purgeResult.supabaseDeleted}).`
       );
+      showPopupStatus("Berjaya disimpan", false);
     } catch (error) {
       console.error(error);
-      setStatus(error.message || "Gagal kemaskini senarai nama.", true);
+      const message = error.message || "Gagal kemaskini senarai nama.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
     }
   }
 })();
