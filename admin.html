@@ -46,6 +46,9 @@
 
         <button id="manageStudentsBtn" type="button" class="save-btn">Pengurusan senarai murid</button>
 
+        <button id="compareNamelistBtn" type="button" class="save-btn">Banding Senarai Nama</button>
+        <input id="compareFileInput" type="file" accept=".csv,text/csv" hidden>
+
         <button id="logoutBtn" type="button" class="save-btn secondary-btn">Logout</button>
       </div>
     </section>
@@ -55,6 +58,8 @@
       <p class="warning-text">Perubahan akan terus digunakan oleh Masuk Data dan Statistik selepas simpan.</p>
       <div class="manage-controls">
         <button id="toggleAdminPanelBtn" type="button" class="save-btn secondary-btn">Tunjuk Panel Admin</button>
+        <input type="text" id="manageSearchInput" placeholder="Cari nama atau No. Kad..." autocomplete="off">
+        <button id="undoRemoveBtn" type="button" class="save-btn secondary-btn" disabled>Undo Buang</button>
       </div>
       <div class="table-wrap">
         <table id="studentManageTable" class="manage-table">
@@ -113,6 +118,17 @@
       <div class="table-actions">
         <button id="cancelImportDataBtn" type="button" class="save-btn secondary-btn">Batal</button>
         <button id="confirmImportDataBtn" type="button" class="save-btn">Teruskan Import</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="compareModal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card-wide">
+      <h3>Perbandingan Senarai Nama</h3>
+      <div id="compareContent" class="compare-content"></div>
+      <div class="table-actions">
+        <button id="cancelCompareBtn" type="button" class="save-btn secondary-btn">Batal</button>
+        <button id="confirmCompareBtn" type="button" class="save-btn">Teruskan Import</button>
       </div>
     </div>
   </div>

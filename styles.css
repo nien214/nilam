@@ -632,6 +632,62 @@ td:nth-child(11) {
   min-width: 84px;
 }
 
+/* Row hover highlight — applies across all tables */
+tbody tr:hover > td {
+  background: rgba(18, 116, 117, 0.06) !important;
+}
+
+/* Search field */
+#manageSearchInput {
+  width: 220px;
+  flex-shrink: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.32rem 0.5rem;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+/* Compare modal */
+.modal-card-wide {
+  width: min(640px, 100%);
+}
+
+.compare-content {
+  max-height: 55vh;
+  overflow-y: auto;
+  margin-bottom: 0.75rem;
+}
+
+.compare-section-title {
+  margin: 0.5rem 0 0.25rem;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.compare-add {
+  color: #16a34a;
+}
+
+.compare-remove {
+  color: #dc2626;
+}
+
+.compare-update {
+  color: #d97706;
+}
+
+.compare-list {
+  margin: 0 0 0.5rem 1.25rem;
+  padding: 0;
+  font-size: 0.83rem;
+  color: var(--ink);
+}
+
+.compare-list li {
+  margin-bottom: 0.15rem;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

@@ -30,6 +30,9 @@
     rowsPerPage: 20,
     pendingImportYear: "",
     pendingImportMonth: "",
+    undoStack: [],
+    searchQuery: "",
+    pendingCompareResult: null,
   };
 
   const el = {
@@ -57,6 +60,14 @@
     manageTbody: document.getElementById("studentManageTbody"),
     addRowBtn: document.getElementById("addStudentRowBtn"),
     saveStudentsBtn: document.getElementById("saveStudentsBtn"),
+    undoRemoveBtn: document.getElementById("undoRemoveBtn"),
+    searchInput: document.getElementById("manageSearchInput"),
+    compareBtn: document.getElementById("compareNamelistBtn"),
+    compareFileInput: document.getElementById("compareFileInput"),
+    compareModal: document.getElementById("compareModal"),
+    compareContent: document.getElementById("compareContent"),
+    cancelCompareBtn: document.getElementById("cancelCompareBtn"),
+    confirmCompareBtn: document.getElementById("confirmCompareBtn"),
     logoutBtn: document.getElementById("logoutBtn"),
     status: document.getElementById("adminStatus"),
   };
@@ -107,6 +118,24 @@
     el.saveStudentsBtn.addEventListener("click", saveManagedStudents);
     el.manageTbody.addEventListener("click", handleManageTableClick);
     el.manageTbody.addEventListener("input", handleManageTableInput);
+    if (el.undoRemoveBtn) {
+      el.undoRemoveBtn.addEventListener("click", undoRemove);
+    }
+    if (el.searchInput) {
+      el.searchInput.addEventListener("input", handleSearchInput);
+    }
+    if (el.compareBtn) {
+      el.compareBtn.addEventListener("click", startCompareNamelist);
+    }
+    if (el.compareFileInput) {
+      el.compareFileInput.addEventListener("change", handleCompareFile);
+    }
+    if (el.cancelCompareBtn) {
+      el.cancelCompareBtn.addEventListener("click", closeCompareModal);
+    }
+    if (el.confirmCompareBtn) {
+      el.confirmCompareBtn.addEventListener("click", confirmCompare);
+    }
     el.logoutBtn.addEventListener("click", logout);
   }
 
@@ -181,37 +210,42 @@
       state.students = [emptyStudentRow()];
     }
     state.currentPage = 1;
+    state.undoStack = [];
+    state.searchQuery = "";
+    if (el.searchInput) {
+      el.searchInput.value = "";
+    }
+    updateUndoBtn();
     renderManageTable();
   }
 
   function renderManageTable() {
-    const totalRows = state.students.length;
+    const query = state.searchQuery.toLowerCase();
+    const indexed = state.students.map((row, i) => ({ row, originalIndex: i }));
+    const filtered = query
+      ? indexed.filter(({ row }) =>
+          row.nama.toLowerCase().includes(query) ||
+          row.no_kad_pengenalan.toLowerCase().includes(query)
+        )
+      : indexed;
+
+    const totalRows = filtered.length;
     const totalPages = Math.max(1, Math.ceil(totalRows / state.rowsPerPage));
     state.currentPage = Math.min(Math.max(1, state.currentPage), totalPages);
     const start = (state.currentPage - 1) * state.rowsPerPage;
     const end = start + state.rowsPerPage;
-    const visibleRows = state.students.slice(start, end);
+    const visibleRows = filtered.slice(start, end);
 
     const rowsHtml = visibleRows
       .map(
-        (row, index) => `
+        ({ row, originalIndex }) => `
         <tr>
-          <td><input type="text" data-field="nama" data-index="${start + index}" value="${escapeAttr(
-          row.nama
-        )}"></td>
-          <td><input type="text" data-field="jantina" data-index="${start + index}" value="${escapeAttr(
-          row.jantina
-        )}"></td>
-          <td><input type="text" data-field="kelas" data-index="${start + index}" value="${escapeAttr(
-          row.kelas
-        )}"></td>
-          <td><input type="text" data-field="no_kad_pengenalan" data-index="${start + index}" value="${escapeAttr(
-          row.no_kad_pengenalan
-        )}"></td>
-          <td><input type="text" data-field="email_google_classroom" data-index="${start + index}" value="${escapeAttr(
-          row.email_google_classroom
-        )}"></td>
-          <td><button type="button" class="mini-btn danger-btn" data-remove-index="${start + index}">Buang</button></td>
+          <td><input type="text" data-field="nama" data-index="${originalIndex}" value="${escapeAttr(row.nama)}"></td>
+          <td><input type="text" data-field="jantina" data-index="${originalIndex}" value="${escapeAttr(row.jantina)}"></td>
+          <td><input type="text" data-field="kelas" data-index="${originalIndex}" value="${escapeAttr(row.kelas)}"></td>
+          <td><input type="text" data-field="no_kad_pengenalan" data-index="${originalIndex}" value="${escapeAttr(row.no_kad_pengenalan)}"></td>
+          <td><input type="text" data-field="email_google_classroom" data-index="${originalIndex}" value="${escapeAttr(row.email_google_classroom)}"></td>
+          <td><button type="button" class="mini-btn danger-btn" data-remove-index="${originalIndex}">Buang</button></td>
         </tr>
       `
       )
@@ -244,6 +278,13 @@
       return;
     }
 
+    const student = state.students[index];
+    const displayName = [student.nama, student.kelas ? `(${student.kelas})` : ""].filter(Boolean).join(" ");
+    if (!window.confirm(`Buang murid ini?\n\n${displayName || "(tanpa nama)"}`)) {
+      return;
+    }
+
+    state.undoStack.push({ index, row: { ...state.students[index] } });
     state.students.splice(index, 1);
     if (!state.students.length) {
       state.students.push(emptyStudentRow());
@@ -251,6 +292,7 @@
     const totalPages = Math.max(1, Math.ceil(state.students.length / state.rowsPerPage));
     state.currentPage = Math.min(state.currentPage, totalPages);
     renderManageTable();
+    updateUndoBtn();
   }
 
   function handleManageTableInput(event) {
@@ -347,30 +389,31 @@
     try {
       syncCurrentPageToState();
 
-      const cleaned = state.students
-        .map(normalizeStudentRow)
-        .filter((row) => row.nama || row.kelas || row.jantina || row.no_kad_pengenalan || row.email_google_classroom);
-
       const noKadSet = new Set();
-      cleaned.forEach((row, idx) => {
-        if (!row.nama || !row.kelas || !row.no_kad_pengenalan) {
-          throw new Error(`Baris ${idx + 1}: Nama, Kelas dan No. Kad Pengenalan wajib diisi.`);
-        }
-        if (noKadSet.has(row.no_kad_pengenalan)) {
-          throw new Error(`No. Kad Pengenalan berulang dikesan: ${row.no_kad_pengenalan}`);
-        }
-        noKadSet.add(row.no_kad_pengenalan);
-      });
+      const toSave = state.students
+        .map(normalizeStudentRow)
+        .filter((row) => {
+          if (!row.nama || !row.kelas || !row.no_kad_pengenalan) {
+            return false;
+          }
+          if (noKadSet.has(row.no_kad_pengenalan)) {
+            throw new Error(`No. Kad Pengenalan berulang dikesan: ${row.no_kad_pengenalan}`);
+          }
+          noKadSet.add(row.no_kad_pengenalan);
+          return true;
+        });
 
-      if (!cleaned.length) {
+      if (!toSave.length) {
         throw new Error("Senarai murid kosong. Tambah sekurang-kurangnya 1 murid.");
       }
 
-      localStorage.setItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(cleaned));
-      state.students = cleaned;
+      localStorage.setItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(toSave));
+      state.students = toSave;
+      state.undoStack = [];
+      updateUndoBtn();
       renderManageTable();
-      await upsertStudentsToSupabase(cleaned);
-      setStatus(`Senarai murid berjaya disimpan: ${cleaned.length} murid.`);
+      await upsertStudentsToSupabase(toSave);
+      setStatus(`Senarai murid berjaya disimpan: ${toSave.length} murid.`);
     } catch (error) {
       console.error(error);
       setStatus(error.message || "Gagal simpan senarai murid.", true);
@@ -1201,5 +1244,193 @@
   function setStatus(message, isError) {
     el.status.textContent = message;
     el.status.style.color = isError ? "#b00020" : "";
+  }
+
+  // ── Undo ──────────────────────────────────────────────────────────────────
+
+  function undoRemove() {
+    const last = state.undoStack.pop();
+    if (!last) {
+      return;
+    }
+    // If only a single empty placeholder exists, remove it first
+    if (
+      state.students.length === 1 &&
+      !state.students[0].nama &&
+      !state.students[0].kelas &&
+      !state.students[0].no_kad_pengenalan
+    ) {
+      state.students = [];
+    }
+    const insertAt = Math.min(last.index, state.students.length);
+    state.students.splice(insertAt, 0, last.row);
+    state.currentPage = Math.max(1, Math.ceil((insertAt + 1) / state.rowsPerPage));
+    renderManageTable();
+    updateUndoBtn();
+  }
+
+  function updateUndoBtn() {
+    if (el.undoRemoveBtn) {
+      el.undoRemoveBtn.disabled = state.undoStack.length === 0;
+    }
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────────
+
+  function handleSearchInput() {
+    state.searchQuery = el.searchInput ? el.searchInput.value : "";
+    state.currentPage = 1;
+    renderManageTable();
+  }
+
+  // ── Compare Namelist ──────────────────────────────────────────────────────
+
+  function startCompareNamelist() {
+    if (el.compareFileInput) {
+      el.compareFileInput.value = "";
+      el.compareFileInput.click();
+    }
+  }
+
+  async function handleCompareFile(event) {
+    const [file] = event.target.files || [];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+
+      const namaColumn = resolveColumnName(rows, ["nama murid", "nama"]);
+      const jantinaColumn = resolveColumnName(rows, ["jantina"]);
+      const kelasColumn = resolveColumnName(rows, ["kelas 2026", "kelas"]);
+      const noKadColumn = resolveColumnName(rows, ["no. kad pengenalan", "no kad pengenalan"]);
+      const emailColumn = resolveColumnName(rows, ["email id google classroom", "email google classroom", "email"]);
+
+      if (!namaColumn || !kelasColumn || !noKadColumn) {
+        throw new Error("Kolum CSV tidak sah. Wajib ada NAMA MURID, Kelas dan No. Kad Pengenalan.");
+      }
+
+      const newStudents = rows
+        .map((row) =>
+          normalizeStudentRow({
+            nama: row[namaColumn],
+            jantina: jantinaColumn ? row[jantinaColumn] : "",
+            kelas: row[kelasColumn],
+            no_kad_pengenalan: noKadColumn ? row[noKadColumn] : "",
+            email_google_classroom: emailColumn ? row[emailColumn] : "",
+          })
+        )
+        .filter((row) => row.nama && row.kelas && row.no_kad_pengenalan);
+
+      if (!newStudents.length) {
+        throw new Error("Tiada murid sah ditemui dalam CSV.");
+      }
+
+      const currentNamelist = getCurrentNamelist().map(normalizeStudentRow);
+      const currentByNoKad = new Map(
+        currentNamelist.filter((r) => r.no_kad_pengenalan).map((r) => [r.no_kad_pengenalan, r])
+      );
+      const newByNoKad = new Map(newStudents.map((r) => [r.no_kad_pengenalan, r]));
+
+      const toAdd = newStudents.filter((r) => !currentByNoKad.has(r.no_kad_pengenalan));
+      const toRemove = currentNamelist.filter(
+        (r) => r.no_kad_pengenalan && !newByNoKad.has(r.no_kad_pengenalan)
+      );
+      const toUpdateKelas = newStudents
+        .filter((r) => currentByNoKad.has(r.no_kad_pengenalan) &&
+          currentByNoKad.get(r.no_kad_pengenalan).kelas !== r.kelas)
+        .map((r) => ({ ...r, kelasLama: currentByNoKad.get(r.no_kad_pengenalan).kelas }));
+      const toUpdateEmail = newStudents
+        .filter((r) => currentByNoKad.has(r.no_kad_pengenalan) &&
+          currentByNoKad.get(r.no_kad_pengenalan).email_google_classroom !== r.email_google_classroom)
+        .map((r) => ({ ...r, emailLama: currentByNoKad.get(r.no_kad_pengenalan).email_google_classroom }));
+
+      const finalList = [...newByNoKad.values()].sort((a, b) => {
+        const byKelas = a.kelas.localeCompare(b.kelas, "ms");
+        return byKelas !== 0 ? byKelas : a.nama.localeCompare(b.nama, "ms");
+      });
+
+      state.pendingCompareResult = { finalList };
+      showCompareModal(toAdd, toRemove, toUpdateKelas, toUpdateEmail, newStudents.length);
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message || "Gagal memuatkan CSV perbandingan.", true);
+    } finally {
+      if (event.target) {
+        event.target.value = "";
+      }
+    }
+  }
+
+  function showCompareModal(toAdd, toRemove, toUpdateKelas, toUpdateEmail, totalNew) {
+    if (!el.compareModal || !el.compareContent) {
+      return;
+    }
+
+    let html = `<p style="margin:0 0 0.5rem;font-size:0.85rem;color:var(--muted)">Jumlah murid dalam CSV baharu: <strong>${totalNew}</strong></p>`;
+
+    if (toAdd.length) {
+      html += `<p class="compare-section-title compare-add">Baharu — ${toAdd.length} murid akan ditambah:</p>`;
+      html += `<ul class="compare-list">${toAdd.map((r) => `<li>${escapeAttr(r.nama)} (${escapeAttr(r.kelas)})</li>`).join("")}</ul>`;
+    } else {
+      html += `<p class="compare-section-title">Tiada murid baharu ditemui.</p>`;
+    }
+
+    if (toRemove.length) {
+      html += `<p class="compare-section-title compare-remove">Dibuang — ${toRemove.length} murid akan dibuang:</p>`;
+      html += `<ul class="compare-list">${toRemove.map((r) => `<li>${escapeAttr(r.nama)} (${escapeAttr(r.kelas)})</li>`).join("")}</ul>`;
+    } else {
+      html += `<p class="compare-section-title">Tiada murid dibuang.</p>`;
+    }
+
+    if (toUpdateKelas.length) {
+      html += `<p class="compare-section-title compare-update">Kelas Berubah — ${toUpdateKelas.length} murid:</p>`;
+      html += `<ul class="compare-list">${toUpdateKelas.map((r) =>
+        `<li>${escapeAttr(r.nama)} — ${escapeAttr(r.kelasLama)} → ${escapeAttr(r.kelas)}</li>`
+      ).join("")}</ul>`;
+    }
+
+    if (toUpdateEmail.length) {
+      html += `<p class="compare-section-title compare-update">Email Berubah — ${toUpdateEmail.length} murid:</p>`;
+      html += `<ul class="compare-list">${toUpdateEmail.map((r) =>
+        `<li>${escapeAttr(r.nama)} — ${escapeAttr(r.emailLama || "(tiada)")} → ${escapeAttr(r.email_google_classroom || "(tiada)")}</li>`
+      ).join("")}</ul>`;
+    }
+
+    el.compareContent.innerHTML = html;
+    el.compareModal.hidden = false;
+  }
+
+  function closeCompareModal() {
+    if (el.compareModal) {
+      el.compareModal.hidden = true;
+    }
+    state.pendingCompareResult = null;
+  }
+
+  async function confirmCompare() {
+    if (!state.pendingCompareResult) {
+      return;
+    }
+    const { finalList } = state.pendingCompareResult;
+    closeCompareModal();
+
+    try {
+      localStorage.setItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(finalList));
+      state.students = finalList;
+      state.undoStack = [];
+      updateUndoBtn();
+      state.currentPage = 1;
+      if (state.isManageOpen) {
+        renderManageTable();
+      }
+      await upsertStudentsToSupabase(finalList);
+      setStatus(`Senarai nama dikemas kini: ${finalList.length} murid.`);
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message || "Gagal kemaskini senarai nama.", true);
+    }
   }
 })();
