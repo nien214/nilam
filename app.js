@@ -142,9 +142,12 @@
   }
 
   function hydrateStudents(students) {
-    state.rawStudents = students;
+    state.rawStudents = [...students].sort((a, b) => {
+      const byKelas = a.kelas.localeCompare(b.kelas, "ms");
+      return byKelas !== 0 ? byKelas : a.nama.localeCompare(b.nama, "ms");
+    });
     resetClassDropdown();
-    initClassDropdown(students);
+    initClassDropdown(state.rawStudents);
     el.tbody.innerHTML =
       '<tr><td colspan="11" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
   }
