@@ -67,19 +67,23 @@
         </table>
       </div>
       <div class="pagination-controls pagination-controls-center" aria-label="Kawalan pagination senarai murid">
-        <label for="manageRowsPerPage">Papar</label>
-        <select id="manageRowsPerPage">
-          <option value="20">20</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-        </select>
-        <span>baris</span>
-        <button id="managePrevPageBtn" type="button" class="mini-btn secondary-btn">Sebelum</button>
-        <span>Halaman</span>
-        <input id="managePageInput" type="number" min="1" step="1" value="1" aria-label="Nombor halaman semasa">
-        <span>/</span>
-        <span id="managePageTotal">1</span>
-        <button id="manageNextPageBtn" type="button" class="mini-btn secondary-btn">Seterusnya</button>
+        <span class="page-size-inline">
+          <label for="manageRowsPerPage">Papar</label>
+          <select id="manageRowsPerPage">
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+          <span>baris</span>
+        </span>
+        <span class="page-nav-inline">
+          <button id="managePrevPageBtn" type="button" class="mini-btn secondary-btn">Sebelum</button>
+          <span>Halaman</span>
+          <input id="managePageInput" type="number" min="1" step="1" value="1" aria-label="Nombor halaman semasa">
+          <span>/</span>
+          <span id="managePageTotal">1</span>
+          <button id="manageNextPageBtn" type="button" class="mini-btn secondary-btn">Seterusnya</button>
+        </span>
       </div>
       <div class="table-actions">
         <button id="addStudentRowBtn" type="button" class="save-btn">Tambah Murid</button>
