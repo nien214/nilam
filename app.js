@@ -500,12 +500,14 @@
     const config = window.NILAM_CONFIG || {};
     const selectedYear = String(new Date().getFullYear());
     let localStudents = [];
+    let hasLocalOverride = false;
     const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
         const parsed = JSON.parse(overrideRaw);
         if (Array.isArray(parsed)) {
           localStudents = parsed;
+          hasLocalOverride = true;
         }
       } catch (error) {
         console.error("Gagal parse namelist override", error);
@@ -517,6 +519,13 @@
     }
 
     const normalizedLocal = normalizeStudents(localStudents);
+
+    // If admin has explicitly set a local override, use it as the authoritative
+    // source without merging with Supabase (which may still contain removed students
+    // since upsert never deletes rows).
+    if (hasLocalOverride && normalizedLocal.length) {
+      return normalizedLocal;
+    }
 
     try {
       const supabaseStudents = await loadStudentsFromSupabase(config, selectedYear);

@@ -34,12 +34,14 @@
   async function getStudents(config) {
     const selectedYear = String(new Date().getFullYear());
     let localRaw = [];
+    let hasLocalOverride = false;
     const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
         const parsed = JSON.parse(overrideRaw);
         if (Array.isArray(parsed)) {
           localRaw = parsed;
+          hasLocalOverride = true;
         }
       } catch (error) {
         console.error("Gagal parse namelist override", error);
@@ -51,6 +53,13 @@
     }
 
     const localStudents = normalizeStudents(localRaw);
+
+    // If admin has explicitly set a local override, use it as the authoritative
+    // source without merging with Supabase (which may still contain removed students
+    // since upsert never deletes rows).
+    if (hasLocalOverride && localStudents.length) {
+      return localStudents;
+    }
 
     try {
       const supabaseStudents = await getSupabaseStudents(config, selectedYear);
