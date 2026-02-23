@@ -385,13 +385,22 @@
     setSummaryHeaders(false);
 
     const byStudent = new Map();
-    periodRecords
-      .filter((row) => row.kelas === selectedClass)
+    const byName = new Map();
+
+    // Always seed from current master list so every active student appears, even with 0 record.
+    state.students
+      .filter((row) => String(row.kelas || "").trim() === selectedClass)
       .forEach((row) => {
-        const key = String(row.no_kad_pengenalan || row.nama || "").trim();
+        const noKad = String(row.no_kad_pengenalan || "").trim();
+        const nama = String(row.nama || "").trim();
+        if (!nama) {
+          return;
+        }
+        const key = noKad || `nm:${nama.toLowerCase()}`;
         if (!byStudent.has(key)) {
           byStudent.set(key, {
-            nama: String(row.nama || "").trim(),
+            nama,
+            no_kad_pengenalan: noKad,
             bahan_digital: 0,
             bahan_bukan_buku: 0,
             fiksyen: 0,
@@ -401,6 +410,39 @@
             lain_lain_bahasa: 0,
             jumlah_bacaan: 0,
           });
+          if (!byName.has(nama.toLowerCase())) {
+            byName.set(nama.toLowerCase(), key);
+          }
+        }
+      });
+
+    periodRecords
+      .filter((row) => row.kelas === selectedClass)
+      .forEach((row) => {
+        const noKad = String(row.no_kad_pengenalan || "").trim();
+        const nama = String(row.nama || "").trim();
+        const existingKey =
+          (noKad && byStudent.has(noKad) && noKad) ||
+          (nama && byName.get(nama.toLowerCase())) ||
+          "";
+        const key = existingKey || noKad || `nm:${nama.toLowerCase()}`;
+
+        if (!byStudent.has(key)) {
+          byStudent.set(key, {
+            nama: String(row.nama || "").trim(),
+            no_kad_pengenalan: noKad,
+            bahan_digital: 0,
+            bahan_bukan_buku: 0,
+            fiksyen: 0,
+            bukan_fiksyen: 0,
+            bahasa_melayu: 0,
+            bahasa_inggeris: 0,
+            lain_lain_bahasa: 0,
+            jumlah_bacaan: 0,
+          });
+          if (nama && !byName.has(nama.toLowerCase())) {
+            byName.set(nama.toLowerCase(), key);
+          }
         }
 
         const slot = byStudent.get(key);

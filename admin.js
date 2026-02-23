@@ -33,6 +33,10 @@
     undoStack: [],
     searchQuery: "",
     pendingCompareResult: null,
+    autoSyncTimer: null,
+    autoSyncInFlight: false,
+    autoSyncQueued: false,
+    autoSyncRequireDeactivate: false,
   };
 
   const el = {
@@ -294,6 +298,7 @@
     state.currentPage = Math.min(state.currentPage, totalPages);
     renderManageTable();
     updateUndoBtn();
+    queueAutoSync({ deactivateMissing: true });
   }
 
   function handleManageTableInput(event) {
@@ -307,17 +312,21 @@
       return;
     }
     state.students[index][field] = input.value;
+    queueAutoSync({ deactivateMissing: false });
   }
 
   function handleManageTableChange(event) {
-    const input = event.target.closest('input[data-field="kelas"]');
+    const input = event.target.closest("input[data-field][data-index]");
     if (!input) {
       return;
     }
-    syncCurrentPageToState();
-    sortStudentsByClassThenName();
-    state.currentPage = 1;
-    renderManageTable();
+    if (input.dataset.field === "kelas") {
+      syncCurrentPageToState();
+      sortStudentsByClassThenName();
+      state.currentPage = 1;
+      renderManageTable();
+    }
+    queueAutoSync({ deactivateMissing: false });
   }
 
   function sortStudentsByClassThenName() {
@@ -409,6 +418,7 @@
     state.students.push(emptyStudentRow());
     state.currentPage = Math.max(1, Math.ceil(state.students.length / state.rowsPerPage));
     renderManageTable();
+    queueAutoSync({ deactivateMissing: false });
   }
 
   async function saveManagedStudents() {
@@ -470,6 +480,68 @@
       }
       state.students[index][field] = input.value;
     });
+  }
+
+  function queueAutoSync(options = {}) {
+    if (!state.isManageOpen) {
+      return;
+    }
+    if (options.deactivateMissing) {
+      state.autoSyncRequireDeactivate = true;
+    }
+    if (state.autoSyncTimer) {
+      clearTimeout(state.autoSyncTimer);
+    }
+    state.autoSyncTimer = setTimeout(() => {
+      state.autoSyncTimer = null;
+      runAutoSync();
+    }, 700);
+  }
+
+  async function runAutoSync() {
+    if (state.autoSyncInFlight) {
+      state.autoSyncQueued = true;
+      return;
+    }
+    state.autoSyncInFlight = true;
+    const deactivateMissing = state.autoSyncRequireDeactivate;
+    state.autoSyncRequireDeactivate = false;
+
+    try {
+      syncCurrentPageToState();
+      const noKadSet = new Set();
+      const toSync = state.students
+        .map(normalizeStudentRow)
+        .filter((row) => {
+          if (!row.nama || !row.kelas) {
+            return false;
+          }
+          if (row.no_kad_pengenalan && !row.no_kad_pengenalan.startsWith("NOIC_")) {
+            if (noKadSet.has(row.no_kad_pengenalan)) {
+              throw new Error(`No. Kad Pengenalan berulang dikesan: ${row.no_kad_pengenalan}`);
+            }
+            noKadSet.add(row.no_kad_pengenalan);
+          }
+          return true;
+        });
+
+      if (!toSync.length) {
+        throw new Error("Auto-sync gagal: Senarai murid kosong.");
+      }
+
+      localStorage.setItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(toSync));
+      await upsertStudentsToSupabase(toSync, { deactivateMissing });
+      setStatus(`Auto-sync selesai (${toSync.length} murid).`);
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message || "Auto-sync gagal.", true);
+    } finally {
+      state.autoSyncInFlight = false;
+      if (state.autoSyncQueued) {
+        state.autoSyncQueued = false;
+        runAutoSync();
+      }
+    }
   }
 
   function startImport() {
@@ -1097,7 +1169,8 @@
     return `NOIC_${kelas}_${nama}`;
   }
 
-  async function upsertStudentsToSupabase(students) {
+  async function upsertStudentsToSupabase(students, options = {}) {
+    const deactivateMissing = options.deactivateMissing !== false;
     const config = window.NILAM_CONFIG || {};
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
       return;
@@ -1139,7 +1212,7 @@
     // Soft-delete removed students (active=false) instead of deleting,
     // to avoid FK constraint violations from nilam_records references.
     const keepIcs = payload.map((r) => r.no_kad_pengenalan).join(",");
-    if (keepIcs) {
+    if (deactivateMissing && keepIcs) {
       const deactivateRes = await fetch(
         `${supabaseUrl}/rest/v1/nilam_students?no_kad_pengenalan=not.in.(${keepIcs})`,
         {
@@ -1485,6 +1558,7 @@
     state.currentPage = Math.max(1, Math.ceil((insertAt + 1) / state.rowsPerPage));
     renderManageTable();
     updateUndoBtn();
+    queueAutoSync({ deactivateMissing: true });
   }
 
   function updateUndoBtn() {

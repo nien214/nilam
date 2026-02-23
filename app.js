@@ -194,7 +194,28 @@
       '<tr><td colspan="11" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
   }
 
+  async function refreshStudentsPreserveSelectedClass() {
+    const selectedBefore = state.selectedClass;
+    if (!selectedBefore) {
+      return;
+    }
+    try {
+      const latestStudents = await loadStudents();
+      state.rawStudents = latestStudents;
+      resetClassDropdown();
+      initClassDropdown(latestStudents);
+      const hasClass = latestStudents.some((row) => row.kelas === selectedBefore);
+      if (hasClass) {
+        el.kelas.value = selectedBefore;
+        state.selectedClass = selectedBefore;
+      }
+    } catch (error) {
+      console.error("Gagal refresh senarai murid semasa pilih kelas", error);
+    }
+  }
+
   async function renderTableAndPrefill() {
+    await refreshStudentsPreserveSelectedClass();
     renderTable();
     await prefillSavedValuesForSelection();
   }
