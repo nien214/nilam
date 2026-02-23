@@ -1325,8 +1325,8 @@
       const noKadColumn = resolveColumnName(rows, ["no. kad pengenalan", "no kad pengenalan"]);
       const emailColumn = resolveColumnName(rows, ["email id google classroom", "email google classroom", "email"]);
 
-      if (!namaColumn || !kelasColumn || !noKadColumn) {
-        throw new Error("Kolum CSV tidak sah. Wajib ada NAMA MURID, Kelas dan No. Kad Pengenalan.");
+      if (!namaColumn || !kelasColumn) {
+        throw new Error("Kolum CSV tidak sah. Wajib ada NAMA MURID dan Kelas.");
       }
 
       const newStudents = rows
@@ -1339,32 +1339,40 @@
             email_google_classroom: emailColumn ? row[emailColumn] : "",
           })
         )
-        .filter((row) => row.nama && row.kelas && row.no_kad_pengenalan);
+        .filter((row) => row.nama && row.kelas);
 
       if (!newStudents.length) {
         throw new Error("Tiada murid sah ditemui dalam CSV.");
       }
 
+      // Match by IC when present, else fall back to normalised name.
+      function studentKey(r) {
+        const ic = String(r.no_kad_pengenalan || "").trim();
+        return ic || `__name__${String(r.nama || "").trim().toLowerCase()}`;
+      }
+
       const currentNamelist = getCurrentNamelist().map(normalizeStudentRow);
-      const currentByNoKad = new Map(
-        currentNamelist.filter((r) => r.no_kad_pengenalan).map((r) => [r.no_kad_pengenalan, r])
-      );
-      const newByNoKad = new Map(newStudents.map((r) => [r.no_kad_pengenalan, r]));
+      const currentByKey = new Map(currentNamelist.map((r) => [studentKey(r), r]));
+      const newByKey = new Map();
+      newStudents.forEach((r) => newByKey.set(studentKey(r), r));
 
-      const toAdd = newStudents.filter((r) => !currentByNoKad.has(r.no_kad_pengenalan));
-      const toRemove = currentNamelist.filter(
-        (r) => !r.no_kad_pengenalan || !newByNoKad.has(r.no_kad_pengenalan)
-      );
+      const toAdd = newStudents.filter((r) => !currentByKey.has(studentKey(r)));
+      const toRemove = currentNamelist.filter((r) => !newByKey.has(studentKey(r)));
       const toUpdateKelas = newStudents
-        .filter((r) => currentByNoKad.has(r.no_kad_pengenalan) &&
-          currentByNoKad.get(r.no_kad_pengenalan).kelas !== r.kelas)
-        .map((r) => ({ ...r, kelasLama: currentByNoKad.get(r.no_kad_pengenalan).kelas }));
+        .filter((r) => {
+          const key = studentKey(r);
+          return currentByKey.has(key) && currentByKey.get(key).kelas !== r.kelas;
+        })
+        .map((r) => ({ ...r, kelasLama: currentByKey.get(studentKey(r)).kelas }));
       const toUpdateEmail = newStudents
-        .filter((r) => currentByNoKad.has(r.no_kad_pengenalan) &&
-          currentByNoKad.get(r.no_kad_pengenalan).email_google_classroom !== r.email_google_classroom)
-        .map((r) => ({ ...r, emailLama: currentByNoKad.get(r.no_kad_pengenalan).email_google_classroom }));
+        .filter((r) => {
+          const key = studentKey(r);
+          return currentByKey.has(key) &&
+            currentByKey.get(key).email_google_classroom !== r.email_google_classroom;
+        })
+        .map((r) => ({ ...r, emailLama: currentByKey.get(studentKey(r)).email_google_classroom }));
 
-      const finalList = [...newByNoKad.values()].sort((a, b) => {
+      const finalList = [...newByKey.values()].sort((a, b) => {
         const byKelas = a.kelas.localeCompare(b.kelas, "ms");
         return byKelas !== 0 ? byKelas : a.nama.localeCompare(b.nama, "ms");
       });

@@ -621,6 +621,19 @@
   async function loadStudents() {
     const config = window.NILAM_CONFIG || {};
     const selectedYear = String(new Date().getFullYear());
+
+    // Supabase is always authoritative — active=neq.false is filtered server-side.
+    try {
+      const supabaseStudents = await loadStudentsFromSupabase(config, selectedYear);
+      const normalized = normalizeStudents(supabaseStudents);
+      if (normalized.length) {
+        return normalized;
+      }
+    } catch (error) {
+      console.error("Gagal muat senarai murid dari Supabase", error);
+    }
+
+    // Offline fallback: localStorage override, then bundled data.
     let localStudents = [];
     const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
@@ -633,43 +646,9 @@
         console.error("Gagal parse namelist override", error);
       }
     }
-
     if (!localStudents.length) {
       localStudents = Array.isArray(window.NILAM_STUDENTS) ? window.NILAM_STUDENTS : [];
     }
-
-    try {
-      const allSupabaseRows = await loadStudentsFromSupabase(config, selectedYear);
-
-      // ICs explicitly deactivated by admin — never re-add from local.
-      const deactivatedIcs = new Set(
-        allSupabaseRows
-          .filter((r) => r.active === false)
-          .map((r) => r.no_kad_pengenalan)
-          .filter(Boolean)
-      );
-
-      // Active Supabase students (kelas may be null → filtered by normalizeStudents,
-      // those gaps are filled from local below).
-      const normalizedSupabase = normalizeStudents(
-        allSupabaseRows.filter((r) => r.active !== false)
-      );
-
-      // Local fallback, minus deactivated students.
-      const normalizedLocal = normalizeStudents(
-        localStudents.filter((r) => {
-          const ic = String(r.no_kad_pengenalan || "").trim();
-          return !ic || !deactivatedIcs.has(ic);
-        })
-      );
-
-      if (allSupabaseRows.length || deactivatedIcs.size) {
-        return mergeStudentsByNoKad(normalizedSupabase, normalizedLocal);
-      }
-    } catch (error) {
-      console.error("Gagal muat senarai murid dari Supabase", error);
-    }
-
     const normalizedLocal = normalizeStudents(localStudents);
     if (normalizedLocal.length) {
       return normalizedLocal;
@@ -708,7 +687,8 @@
     const kelasField = `kelas_${safeYear}`;
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
-      select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField},active`,
+      select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField}`,
+      active: "neq.false",
       order: "nama_murid.asc",
       limit: "50000",
     });
@@ -737,7 +717,6 @@
       no_kad_pengenalan: String(row.no_kad_pengenalan || "").trim(),
       jantina: String(row.jantina || "").trim(),
       email_google_classroom: String(row.email_google_classroom || "").trim(),
-      active: row.active,
     }));
   }
 
