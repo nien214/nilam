@@ -129,6 +129,41 @@
     return nama ? keys.has(`nm:${nama}`) : false;
   }
 
+  function alignRecordsToCurrentClass(records, students) {
+    const classByNoKad = new Map();
+    const nameClasses = new Map();
+
+    (Array.isArray(students) ? students : []).forEach((row) => {
+      const kelas = normalizeText(row.kelas);
+      const nama = normalizeText(row.nama).toLowerCase();
+      const noKad = normalizeText(row.no_kad_pengenalan);
+      if (!kelas || !nama) {
+        return;
+      }
+      if (noKad) {
+        classByNoKad.set(noKad, kelas);
+      }
+      if (!nameClasses.has(nama)) {
+        nameClasses.set(nama, new Set());
+      }
+      nameClasses.get(nama).add(kelas);
+    });
+
+    return (Array.isArray(records) ? records : []).map((row) => {
+      const noKad = normalizeText(row.no_kad_pengenalan);
+      const nama = normalizeText(row.nama).toLowerCase();
+      const byNoKad = noKad ? classByNoKad.get(noKad) : "";
+      if (byNoKad) {
+        return { ...row, kelas: byNoKad };
+      }
+      const classSet = nameClasses.get(nama);
+      if (classSet && classSet.size === 1) {
+        return { ...row, kelas: [...classSet][0] };
+      }
+      return row;
+    });
+  }
+
   function parseTimestamp(value) {
     const time = Date.parse(value || "");
     return Number.isFinite(time) ? time : 0;
@@ -308,7 +343,11 @@
     }
 
     const allowedByClass = buildAllowedKeysByClass(students);
-    const records = dedupeRecords([...supabaseRecords, ...localRecords]).filter((row) =>
+    const alignedRecords = alignRecordsToCurrentClass(
+      dedupeRecords([...supabaseRecords, ...localRecords]),
+      students
+    );
+    const records = alignedRecords.filter((row) =>
       recordMatchesMaster(row, allowedByClass)
     );
     return {
