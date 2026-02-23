@@ -701,11 +701,11 @@
     const maxValue = Math.max(...rows.map((r) => r.jumlah), 1);
     const maxNameLen = Math.max(...rows.map((r) => r.nama.length), 1);
     const rowHeight = 28;
-    const left = Math.min(460, Math.max(190, 9 * maxNameLen));
+    const left = Math.min(320, Math.max(160, 7 * maxNameLen));
     const right = 48;
     const top = 18;
     const bottom = 24;
-    const width = 960;
+    const width = 680;
     const plotWidth = width - left - right;
     const chartHeight = top + bottom + rows.length * rowHeight;
 

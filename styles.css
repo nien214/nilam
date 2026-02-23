@@ -125,18 +125,18 @@ label {
 }
 
 #statBulan {
-  width: 20ch;
-  min-width: 20ch;
+  width: 24ch;
+  min-width: 24ch;
 }
 
 #statTingkatan {
-  width: 18ch;
-  min-width: 18ch;
+  width: 22ch;
+  min-width: 22ch;
 }
 
 #statKelas {
-  width: 14ch;
-  min-width: 14ch;
+  width: 18ch;
+  min-width: 18ch;
 }
 
 .controls #statTahun,
@@ -228,6 +228,11 @@ button:hover {
 
 #summaryTable {
   margin-bottom: 1rem;
+}
+
+#summaryTable td:nth-child(n+3),
+#summaryTable th:nth-child(n+3) {
+  text-align: center;
 }
 
 .table-actions {
@@ -573,12 +578,11 @@ td:nth-child(11) {
 }
 
 .bar-scroll {
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .bar-svg {
   width: 100%;
-  min-width: 620px;
   height: auto;
 }
 
@@ -588,7 +592,7 @@ td:nth-child(11) {
 }
 
 .axis-label-name {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .axis-label-light {
