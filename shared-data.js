@@ -31,15 +31,32 @@
     return String(value || "").trim();
   }
 
+  // Returns students without IC from the localStorage namelist override.
+  // These cannot be stored in Supabase (no primary key) so they are kept locally.
+  function getLocalNoIcStudents() {
+    const raw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return normalizeStudents(parsed.filter((r) => !normalizeText(r.no_kad_pengenalan)));
+      }
+    } catch (_) {}
+    return [];
+  }
+
   async function getStudents(config) {
     const selectedYear = String(new Date().getFullYear());
+
+    // No-IC students can't live in Supabase — supplement from localStorage override.
+    const noIcStudents = getLocalNoIcStudents();
 
     // Supabase is always authoritative — active=neq.false is filtered server-side.
     try {
       const supabaseStudents = await getSupabaseStudents(config, selectedYear);
       const normalized = normalizeStudents(supabaseStudents);
-      if (normalized.length) {
-        return normalized;
+      if (normalized.length || noIcStudents.length) {
+        return [...normalized, ...noIcStudents];
       }
     } catch (error) {
       console.error("Gagal muat senarai murid dari Supabase", error);

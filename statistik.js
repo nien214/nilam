@@ -53,7 +53,7 @@
     try {
       const data = await window.NILAM_DATA.loadAllData();
       state.records = data.records;
-      state.allClasses = [...new Set([...data.studentsByClass.keys(), ...data.records.map((row) => row.kelas)])].sort(
+      state.allClasses = [...data.studentsByClass.keys()].sort(
         (a, b) => a.localeCompare(b, "ms")
       );
       state.classes = [...state.allClasses];
