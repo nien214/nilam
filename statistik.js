@@ -42,6 +42,7 @@
     students: [],
     allowedStudentKeysByClass: new Map(),
     classByNoKad: new Map(),
+    nameByNoKad: new Map(),
     classesByName: new Map(),
     allClasses: [],
     classes: [],
@@ -60,6 +61,7 @@
       state.students = Array.isArray(data.students) ? data.students : [];
       state.allowedStudentKeysByClass = buildAllowedStudentKeysByClass(state.students);
       state.classByNoKad = buildClassByNoKad(state.students);
+      state.nameByNoKad = buildNameByNoKad(state.students);
       state.classesByName = buildClassesByName(state.students);
       state.allClasses = [...data.studentsByClass.keys()].sort(
         (a, b) => a.localeCompare(b, "ms")
@@ -857,6 +859,18 @@
     return map;
   }
 
+  function buildNameByNoKad(students) {
+    const map = new Map();
+    (Array.isArray(students) ? students : []).forEach((row) => {
+      const noKad = normalizeKeyText(row.no_kad_pengenalan);
+      const nama = normalizeKeyText(row.nama);
+      if (noKad && nama) {
+        map.set(noKad, nama);
+      }
+    });
+    return map;
+  }
+
   function buildClassesByName(students) {
     const map = new Map();
     (Array.isArray(students) ? students : []).forEach((row) => {
@@ -876,16 +890,31 @@
   function resolveRecordClassByMaster(row) {
     const noKad = normalizeKeyText(row?.no_kad_pengenalan);
     const nama = normalizeKeyText(row?.nama);
+    const classes = state.classesByName.get(nama);
 
     if (noKad && state.classByNoKad.has(noKad)) {
       const kelas = state.classByNoKad.get(noKad);
+      const ownerName = state.nameByNoKad.get(noKad);
+      if (ownerName && ownerName === nama) {
+        if (kelas && kelas !== row.kelas) {
+          return { ...row, kelas };
+        }
+        return row;
+      }
+      // IC/name mismatch: prefer unique name-based class to avoid swapped display.
+      if (classes && classes.size === 1) {
+        const [kelasByName] = classes;
+        if (kelasByName && kelasByName !== row.kelas) {
+          return { ...row, kelas: kelasByName };
+        }
+        return row;
+      }
       if (kelas && kelas !== row.kelas) {
         return { ...row, kelas };
       }
       return row;
     }
 
-    const classes = state.classesByName.get(nama);
     if (classes && classes.size === 1) {
       const [kelas] = classes;
       if (kelas && kelas !== row.kelas) {

@@ -131,6 +131,7 @@
 
   function alignRecordsToCurrentClass(records, students) {
     const classByNoKad = new Map();
+    const nameByNoKad = new Map();
     const nameClasses = new Map();
 
     (Array.isArray(students) ? students : []).forEach((row) => {
@@ -142,6 +143,7 @@
       }
       if (noKad) {
         classByNoKad.set(noKad, kelas);
+        nameByNoKad.set(noKad, nama);
       }
       if (!nameClasses.has(nama)) {
         nameClasses.set(nama, new Set());
@@ -152,13 +154,18 @@
     return (Array.isArray(records) ? records : []).map((row) => {
       const noKad = normalizeText(row.no_kad_pengenalan);
       const nama = normalizeText(row.nama).toLowerCase();
-      const byNoKad = noKad ? classByNoKad.get(noKad) : "";
-      if (byNoKad) {
-        return { ...row, kelas: byNoKad };
+      const byNoKadClass = noKad ? classByNoKad.get(noKad) : "";
+      const byNoKadName = noKad ? nameByNoKad.get(noKad) : "";
+      // Trust IC mapping only when IC-owner name matches this record name.
+      if (byNoKadClass && byNoKadName && byNoKadName === nama) {
+        return { ...row, kelas: byNoKadClass };
       }
       const classSet = nameClasses.get(nama);
       if (classSet && classSet.size === 1) {
         return { ...row, kelas: [...classSet][0] };
+      }
+      if (byNoKadClass) {
+        return { ...row, kelas: byNoKadClass };
       }
       return row;
     });
