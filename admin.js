@@ -1062,26 +1062,37 @@
         [kelasField]: row.kelas,
       }));
 
-    if (!payload.length) {
-      return;
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const headers = {
+      "Content-Type": "application/json",
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
+    };
+
+    // Upsert all students in the current list.
+    if (payload.length) {
+      const upsertRes = await fetch(`${supabaseUrl}/rest/v1/nilam_students?on_conflict=no_kad_pengenalan`, {
+        method: "POST",
+        headers: { ...headers, Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(payload),
+      });
+      if (!upsertRes.ok) {
+        const detail = await upsertRes.text();
+        throw new Error(`Sync senarai murid ke Supabase gagal (${upsertRes.status}): ${detail}`);
+      }
     }
 
-    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
-    const endpoint = `${supabaseUrl}/rest/v1/nilam_students?on_conflict=no_kad_pengenalan`;
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: config.supabaseAnonKey,
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
-        Prefer: "resolution=merge-duplicates,return=minimal",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Sync senarai murid ke Supabase gagal (${response.status}): ${detail}`);
+    // Delete rows in Supabase that are no longer in the current list.
+    const keepIcs = payload.map((r) => r.no_kad_pengenalan).join(",");
+    if (keepIcs) {
+      const deleteRes = await fetch(
+        `${supabaseUrl}/rest/v1/nilam_students?no_kad_pengenalan=not.in.(${keepIcs})`,
+        { method: "DELETE", headers }
+      );
+      if (!deleteRes.ok) {
+        const detail = await deleteRes.text();
+        throw new Error(`Padam murid lama dari Supabase gagal (${deleteRes.status}): ${detail}`);
+      }
     }
   }
 
