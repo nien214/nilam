@@ -50,18 +50,6 @@
       <p class="warning-text">Perubahan akan terus digunakan oleh Masuk Data dan Statistik selepas simpan.</p>
       <div class="manage-controls">
         <button id="toggleAdminPanelBtn" type="button" class="save-btn secondary-btn">Tunjuk Panel Admin</button>
-        <div class="pagination-controls" aria-label="Kawalan pagination senarai murid">
-          <label for="manageRowsPerPage">Papar</label>
-          <select id="manageRowsPerPage">
-            <option value="20">20</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-          </select>
-          <span>baris</span>
-          <button id="managePrevPageBtn" type="button" class="mini-btn secondary-btn">Sebelum</button>
-          <span id="managePageInfo">Halaman 1 / 1</span>
-          <button id="manageNextPageBtn" type="button" class="mini-btn secondary-btn">Seterusnya</button>
-        </div>
       </div>
       <div class="table-wrap">
         <table id="studentManageTable" class="manage-table">
@@ -77,6 +65,21 @@
           </thead>
           <tbody id="studentManageTbody"></tbody>
         </table>
+      </div>
+      <div class="pagination-controls pagination-controls-center" aria-label="Kawalan pagination senarai murid">
+        <label for="manageRowsPerPage">Papar</label>
+        <select id="manageRowsPerPage">
+          <option value="20">20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+        <span>baris</span>
+        <button id="managePrevPageBtn" type="button" class="mini-btn secondary-btn">Sebelum</button>
+        <span>Halaman</span>
+        <input id="managePageInput" type="number" min="1" step="1" value="1" aria-label="Nombor halaman semasa">
+        <span>/</span>
+        <span id="managePageTotal">1</span>
+        <button id="manageNextPageBtn" type="button" class="mini-btn secondary-btn">Seterusnya</button>
       </div>
       <div class="table-actions">
         <button id="addStudentRowBtn" type="button" class="save-btn">Tambah Murid</button>

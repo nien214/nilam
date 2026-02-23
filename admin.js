@@ -52,7 +52,8 @@
     rowsPerPageSelect: document.getElementById("manageRowsPerPage"),
     prevPageBtn: document.getElementById("managePrevPageBtn"),
     nextPageBtn: document.getElementById("manageNextPageBtn"),
-    pageInfo: document.getElementById("managePageInfo"),
+    pageInput: document.getElementById("managePageInput"),
+    pageTotal: document.getElementById("managePageTotal"),
     manageTbody: document.getElementById("studentManageTbody"),
     addRowBtn: document.getElementById("addStudentRowBtn"),
     saveStudentsBtn: document.getElementById("saveStudentsBtn"),
@@ -91,6 +92,10 @@
     }
     if (el.rowsPerPageSelect) {
       el.rowsPerPageSelect.addEventListener("change", handleRowsPerPageChange);
+    }
+    if (el.pageInput) {
+      el.pageInput.addEventListener("change", commitPageInput);
+      el.pageInput.addEventListener("keydown", handlePageInputKeydown);
     }
     if (el.prevPageBtn) {
       el.prevPageBtn.addEventListener("click", goToPrevPage);
@@ -213,8 +218,12 @@
       .join("");
 
     el.manageTbody.innerHTML = rowsHtml;
-    if (el.pageInfo) {
-      el.pageInfo.textContent = `Halaman ${state.currentPage} / ${totalPages}`;
+    if (el.pageInput) {
+      el.pageInput.value = String(state.currentPage);
+      el.pageInput.max = String(totalPages);
+    }
+    if (el.pageTotal) {
+      el.pageTotal.textContent = String(totalPages);
     }
     if (el.prevPageBtn) {
       el.prevPageBtn.disabled = state.currentPage <= 1;
@@ -284,6 +293,27 @@
     }
     syncCurrentPageToState();
     state.currentPage += 1;
+    renderManageTable();
+  }
+
+  function handlePageInputKeydown(event) {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    commitPageInput();
+  }
+
+  function commitPageInput() {
+    const raw = el.pageInput ? el.pageInput.value : "";
+    const targetPage = Number(raw);
+    const totalPages = Math.max(1, Math.ceil(state.students.length / state.rowsPerPage));
+    if (!Number.isInteger(targetPage)) {
+      renderManageTable();
+      return;
+    }
+    syncCurrentPageToState();
+    state.currentPage = Math.min(Math.max(1, targetPage), totalPages);
     renderManageTable();
   }
 
