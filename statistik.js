@@ -41,6 +41,8 @@
     records: [],
     students: [],
     allowedStudentKeysByClass: new Map(),
+    classByNoKad: new Map(),
+    classesByName: new Map(),
     allClasses: [],
     classes: [],
     selectedYear: String(new Date().getFullYear()),
@@ -57,6 +59,8 @@
       state.records = data.records;
       state.students = Array.isArray(data.students) ? data.students : [];
       state.allowedStudentKeysByClass = buildAllowedStudentKeysByClass(state.students);
+      state.classByNoKad = buildClassByNoKad(state.students);
+      state.classesByName = buildClassesByName(state.students);
       state.allClasses = [...data.studentsByClass.keys()].sort(
         (a, b) => a.localeCompare(b, "ms")
       );
@@ -168,7 +172,9 @@
     const recentMonthText = getMostRecentMonthText(state.records, state.selectedYear, state.selectedMonth);
     updateChartTitles(classText, periodText, tingkatanText, recentMonthText);
 
-    const periodRecords = state.records.filter((row) => {
+    const periodRecords = state.records
+      .map(resolveRecordClassByMaster)
+      .filter((row) => {
       if (String(row.tahun || "") !== state.selectedYear) {
         return false;
       }
@@ -837,6 +843,57 @@
       }
     });
     return map;
+  }
+
+  function buildClassByNoKad(students) {
+    const map = new Map();
+    (Array.isArray(students) ? students : []).forEach((row) => {
+      const noKad = normalizeKeyText(row.no_kad_pengenalan);
+      const kelas = String(row.kelas || "").trim();
+      if (noKad && kelas) {
+        map.set(noKad, kelas);
+      }
+    });
+    return map;
+  }
+
+  function buildClassesByName(students) {
+    const map = new Map();
+    (Array.isArray(students) ? students : []).forEach((row) => {
+      const nama = normalizeKeyText(row.nama);
+      const kelas = String(row.kelas || "").trim();
+      if (!nama || !kelas) {
+        return;
+      }
+      if (!map.has(nama)) {
+        map.set(nama, new Set());
+      }
+      map.get(nama).add(kelas);
+    });
+    return map;
+  }
+
+  function resolveRecordClassByMaster(row) {
+    const noKad = normalizeKeyText(row?.no_kad_pengenalan);
+    const nama = normalizeKeyText(row?.nama);
+
+    if (noKad && state.classByNoKad.has(noKad)) {
+      const kelas = state.classByNoKad.get(noKad);
+      if (kelas && kelas !== row.kelas) {
+        return { ...row, kelas };
+      }
+      return row;
+    }
+
+    const classes = state.classesByName.get(nama);
+    if (classes && classes.size === 1) {
+      const [kelas] = classes;
+      if (kelas && kelas !== row.kelas) {
+        return { ...row, kelas };
+      }
+    }
+
+    return row;
   }
 
   function filterRecordsByMasterList(records) {
