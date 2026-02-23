@@ -222,6 +222,21 @@ button:hover {
   margin: 0.25rem 0 0.8rem;
 }
 
+#status .status-emph-kelas {
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+#status .status-emph-bulan {
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+#status .status-emph-tahun {
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
 .table-wrap {
   overflow-x: auto;
 }

@@ -363,6 +363,13 @@
 
     const requestSeq = state.prefillRequestSeq + 1;
     state.prefillRequestSeq = requestSeq;
+    const classStudentCount = state.rawStudents.filter((s) => s.kelas === state.selectedClass).length;
+    setPrefillLoadedStatus(
+      state.selectedClass,
+      state.selectedMonth,
+      state.selectedYear,
+      classStudentCount
+    );
 
     try {
       const savedRecords = await loadSavedRecords(
@@ -378,9 +385,8 @@
       }
 
       applySavedRecordsToTable(savedRecords);
-      setStatus(
-        `Data terdahulu dimuatkan untuk ${state.selectedYear} ${state.selectedMonth} ${state.selectedClass} (${savedRecords.length} rekod).`
-      );
+      const latestClassCount = state.rawStudents.filter((s) => s.kelas === state.selectedClass).length;
+      setPrefillLoadedStatus(state.selectedClass, state.selectedMonth, state.selectedYear, latestClassCount);
     } catch (error) {
       if (requestSeq !== state.prefillRequestSeq) {
         return;
@@ -607,34 +613,32 @@
   function mergeStudentsByNoKad(primary, fallback) {
     const byNoKad = new Map();
     const byNameClass = new Set();
+    const merged = [];
 
-    primary.forEach((row) => {
+    const addRow = (row) => {
       const noKad = String(row.no_kad_pengenalan || "").trim();
       const key = `${row.nama.toLowerCase()}|${row.kelas.toLowerCase()}`;
-      if (noKad) {
-        byNoKad.set(noKad, row);
-      } else if (!byNameClass.has(key)) {
-        byNameClass.add(key);
-        byNoKad.set(`__${key}`, row);
-      }
-    });
 
-    fallback.forEach((row) => {
-      const noKad = String(row.no_kad_pengenalan || "").trim();
-      const key = `${row.nama.toLowerCase()}|${row.kelas.toLowerCase()}`;
-      if (noKad) {
-        if (!byNoKad.has(noKad)) {
-          byNoKad.set(noKad, row);
-        }
+      if (byNameClass.has(key)) {
         return;
       }
-      if (!byNameClass.has(key)) {
-        byNameClass.add(key);
-        byNoKad.set(`__${key}`, row);
+      if (noKad && byNoKad.has(noKad)) {
+        return;
       }
-    });
 
-    return [...byNoKad.values()];
+      if (noKad) {
+        byNoKad.set(noKad, row);
+      }
+      byNameClass.add(key);
+      merged.push(row);
+    };
+
+    // Primary source (Supabase) gets priority.
+    primary.forEach((row) => addRow(row));
+    // Fallback source only fills truly missing students.
+    fallback.forEach((row) => addRow(row));
+
+    return merged;
   }
 
   function parseCsv(content) {
@@ -917,6 +921,23 @@
   function setStatus(message, isError) {
     el.status.textContent = message;
     el.status.style.color = isError ? "#b00020" : "";
+  }
+
+  function setStatusHtml(messageHtml, isError) {
+    el.status.innerHTML = messageHtml;
+    el.status.style.color = isError ? "#b00020" : "";
+  }
+
+  function setPrefillLoadedStatus(kelas, bulan, tahun, recordCount) {
+    setStatusHtml(
+      `Data terdahulu dimuatkan untuk <span class="status-emph-kelas">Kelas ${escapeHtml(
+        kelas
+      )}</span> pada bulan <span class="status-emph-bulan">${escapeHtml(
+        bulan
+      )}</span> tahun <span class="status-emph-tahun">${escapeHtml(
+        tahun
+      )}</span> (${Number(recordCount) || 0} rekod).`
+    );
   }
 
   function escapeHtml(value) {
