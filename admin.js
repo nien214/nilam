@@ -118,6 +118,7 @@
     el.saveStudentsBtn.addEventListener("click", saveManagedStudents);
     el.manageTbody.addEventListener("click", handleManageTableClick);
     el.manageTbody.addEventListener("input", handleManageTableInput);
+    el.manageTbody.addEventListener("change", handleManageTableChange);
     if (el.undoRemoveBtn) {
       el.undoRemoveBtn.addEventListener("click", undoRemove);
     }
@@ -308,6 +309,31 @@
     state.students[index][field] = input.value;
   }
 
+  function handleManageTableChange(event) {
+    const input = event.target.closest('input[data-field="kelas"]');
+    if (!input) {
+      return;
+    }
+    syncCurrentPageToState();
+    sortStudentsByClassThenName();
+    state.currentPage = 1;
+    renderManageTable();
+  }
+
+  function sortStudentsByClassThenName() {
+    state.students.sort((a, b) => {
+      const kelasA = String(a.kelas || "").trim();
+      const kelasB = String(b.kelas || "").trim();
+      const byClass = kelasA.localeCompare(kelasB, "ms", { numeric: true, sensitivity: "base" });
+      if (byClass !== 0) {
+        return byClass;
+      }
+      const namaA = String(a.nama || "").trim();
+      const namaB = String(b.nama || "").trim();
+      return namaA.localeCompare(namaB, "ms", { sensitivity: "base" });
+    });
+  }
+
   function handleRowsPerPageChange() {
     syncCurrentPageToState();
     const next = Number(el.rowsPerPageSelect ? el.rowsPerPageSelect.value : state.rowsPerPage);
@@ -388,6 +414,7 @@
   async function saveManagedStudents() {
     try {
       syncCurrentPageToState();
+      sortStudentsByClassThenName();
 
       const noKadSet = new Set();
       const toSave = state.students
