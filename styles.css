@@ -718,6 +718,10 @@ tbody tr:hover > td {
   display: none;
 }
 
+.save-toast.toast-error {
+  background: #b00020;
+}
+
 .save-toast.toast-hide {
   opacity: 0;
   transform: translateX(-50%) translateY(0.5rem);

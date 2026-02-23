@@ -250,14 +250,31 @@
   }
 
   function collectCurrentRows() {
+    // Build a name→IC lookup from the full student list for rows missing an IC.
+    const icByName = new Map(
+      state.rawStudents
+        .filter((s) => s.no_kad_pengenalan)
+        .map((s) => [s.nama.trim().toLowerCase(), s.no_kad_pengenalan.trim()])
+    );
+
     const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
-    return rows.map((row, index) => {
+    const records = [];
+    let bil = 1;
+    rows.forEach((row) => {
       const nama = (row.dataset.nama || "").trim();
       const kelas = (row.dataset.kelas || "").trim();
-      const noKad = (row.dataset.noKad || "").trim();
+      let noKad = (row.dataset.noKad || "").trim();
+
+      // If row has no IC, try to find one by matching name.
       if (!noKad) {
-        throw new Error(`No. Kad Pengenalan tiada untuk murid ${nama}. Sila kemas kini senarai murid di Admin.`);
+        noKad = icByName.get(nama.toLowerCase()) || "";
       }
+
+      // Skip rows that still have no IC — cannot save without FK reference.
+      if (!noKad) {
+        return;
+      }
+
       const jumlahAktiviti = Number(
         row.querySelector('[data-col="jumlah_aktiviti"]').textContent || "0"
       );
@@ -265,7 +282,7 @@
         no_kad_pengenalan: noKad,
         tahun: state.selectedYear,
         bulan: state.selectedMonth,
-        bil: index + 1,
+        bil: bil++,
         nama,
         kelas,
         bahan_digital: getNumberFromCell(row, "bahan_digital"),
@@ -285,8 +302,9 @@
         }
       }
 
-      return record;
+      records.push(record);
     });
+    return records;
   }
 
   async function saveAllRecords() {
@@ -354,6 +372,7 @@
         ).slice(0, 180)})`,
         true
       );
+      showToast("Simpanan gagal — disimpan tempatan", true);
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     }
   }
@@ -1049,7 +1068,7 @@
   }
 
   let toastTimer = null;
-  function showToast(message) {
+  function showToast(message, isError) {
     const toast = document.getElementById("saveToast");
     if (!toast) {
       return;
@@ -1058,13 +1077,16 @@
       clearTimeout(toastTimer);
     }
     toast.textContent = message;
-    toast.classList.remove("toast-hide");
+    toast.classList.remove("toast-hide", "toast-error");
+    if (isError) {
+      toast.classList.add("toast-error");
+    }
     toast.hidden = false;
     toastTimer = setTimeout(() => {
       toast.classList.add("toast-hide");
       toastTimer = setTimeout(() => {
         toast.hidden = true;
-        toast.classList.remove("toast-hide");
+        toast.classList.remove("toast-hide", "toast-error");
         toastTimer = null;
       }, 400);
     }, 2200);
