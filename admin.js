@@ -25,6 +25,9 @@
   const state = {
     students: [],
     isManageOpen: false,
+    isPanelHiddenInManage: false,
+    currentPage: 1,
+    rowsPerPage: 20,
     pendingImportYear: "",
     pendingImportMonth: "",
   };
@@ -45,6 +48,11 @@
     resetBtn: document.getElementById("resetDataBtn"),
     manageBtn: document.getElementById("manageStudentsBtn"),
     manageSection: document.getElementById("studentManageSection"),
+    toggleAdminPanelBtn: document.getElementById("toggleAdminPanelBtn"),
+    rowsPerPageSelect: document.getElementById("manageRowsPerPage"),
+    prevPageBtn: document.getElementById("managePrevPageBtn"),
+    nextPageBtn: document.getElementById("manageNextPageBtn"),
+    pageInfo: document.getElementById("managePageInfo"),
     manageTbody: document.getElementById("studentManageTbody"),
     addRowBtn: document.getElementById("addStudentRowBtn"),
     saveStudentsBtn: document.getElementById("saveStudentsBtn"),
@@ -56,6 +64,10 @@
 
   function init() {
     initImportMonthOptions();
+    if (el.rowsPerPageSelect) {
+      el.rowsPerPageSelect.value = String(state.rowsPerPage);
+    }
+    updateAdminPanelToggleLabel();
     bindEvents();
     if (sessionStorage.getItem(AUTH_SESSION_KEY) === "1") {
       showPanel();
@@ -74,9 +86,22 @@
     el.cancelImportDataBtn.addEventListener("click", closeImportDataDialog);
     el.resetBtn.addEventListener("click", resetAllData);
     el.manageBtn.addEventListener("click", toggleManageStudents);
+    if (el.toggleAdminPanelBtn) {
+      el.toggleAdminPanelBtn.addEventListener("click", toggleAdminPanelVisibility);
+    }
+    if (el.rowsPerPageSelect) {
+      el.rowsPerPageSelect.addEventListener("change", handleRowsPerPageChange);
+    }
+    if (el.prevPageBtn) {
+      el.prevPageBtn.addEventListener("click", goToPrevPage);
+    }
+    if (el.nextPageBtn) {
+      el.nextPageBtn.addEventListener("click", goToNextPage);
+    }
     el.addRowBtn.addEventListener("click", addStudentRow);
     el.saveStudentsBtn.addEventListener("click", saveManagedStudents);
     el.manageTbody.addEventListener("click", handleManageTableClick);
+    el.manageTbody.addEventListener("input", handleManageTableInput);
     el.logoutBtn.addEventListener("click", logout);
   }
 
@@ -110,6 +135,8 @@
   function showPanel() {
     el.loginInfo.hidden = true;
     el.panel.hidden = false;
+    state.isPanelHiddenInManage = false;
+    updateAdminPanelToggleLabel();
     loadStudentsForManage();
   }
 
@@ -119,6 +146,8 @@
     if (el.manageSection) {
       el.manageSection.hidden = true;
     }
+    state.isPanelHiddenInManage = false;
+    updateAdminPanelToggleLabel();
     state.isManageOpen = false;
   }
 
@@ -132,9 +161,12 @@
     state.isManageOpen = !state.isManageOpen;
     el.manageSection.hidden = !state.isManageOpen;
     if (state.isManageOpen) {
+      setAdminPanelHidden(true);
       loadStudentsForManage();
       setStatus("Pengurusan senarai murid dibuka.");
+      return;
     }
+    setAdminPanelHidden(false);
   }
 
   function loadStudentsForManage() {
@@ -143,32 +175,53 @@
     if (!state.students.length) {
       state.students = [emptyStudentRow()];
     }
+    state.currentPage = 1;
     renderManageTable();
   }
 
   function renderManageTable() {
-    const rowsHtml = state.students
+    const totalRows = state.students.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / state.rowsPerPage));
+    state.currentPage = Math.min(Math.max(1, state.currentPage), totalPages);
+    const start = (state.currentPage - 1) * state.rowsPerPage;
+    const end = start + state.rowsPerPage;
+    const visibleRows = state.students.slice(start, end);
+
+    const rowsHtml = visibleRows
       .map(
         (row, index) => `
         <tr>
-          <td><input type="text" data-field="nama" data-index="${index}" value="${escapeAttr(row.nama)}"></td>
-          <td><input type="text" data-field="jantina" data-index="${index}" value="${escapeAttr(
+          <td><input type="text" data-field="nama" data-index="${start + index}" value="${escapeAttr(
+          row.nama
+        )}"></td>
+          <td><input type="text" data-field="jantina" data-index="${start + index}" value="${escapeAttr(
           row.jantina
         )}"></td>
-          <td><input type="text" data-field="kelas" data-index="${index}" value="${escapeAttr(row.kelas)}"></td>
-          <td><input type="text" data-field="no_kad_pengenalan" data-index="${index}" value="${escapeAttr(
+          <td><input type="text" data-field="kelas" data-index="${start + index}" value="${escapeAttr(
+          row.kelas
+        )}"></td>
+          <td><input type="text" data-field="no_kad_pengenalan" data-index="${start + index}" value="${escapeAttr(
           row.no_kad_pengenalan
         )}"></td>
-          <td><input type="text" data-field="email_google_classroom" data-index="${index}" value="${escapeAttr(
+          <td><input type="text" data-field="email_google_classroom" data-index="${start + index}" value="${escapeAttr(
           row.email_google_classroom
         )}"></td>
-          <td><button type="button" class="mini-btn danger-btn" data-remove-index="${index}">Buang</button></td>
+          <td><button type="button" class="mini-btn danger-btn" data-remove-index="${start + index}">Buang</button></td>
         </tr>
       `
       )
       .join("");
 
     el.manageTbody.innerHTML = rowsHtml;
+    if (el.pageInfo) {
+      el.pageInfo.textContent = `Halaman ${state.currentPage} / ${totalPages}`;
+    }
+    if (el.prevPageBtn) {
+      el.prevPageBtn.disabled = state.currentPage <= 1;
+    }
+    if (el.nextPageBtn) {
+      el.nextPageBtn.disabled = state.currentPage >= totalPages;
+    }
   }
 
   function handleManageTableClick(event) {
@@ -186,18 +239,83 @@
     if (!state.students.length) {
       state.students.push(emptyStudentRow());
     }
+    const totalPages = Math.max(1, Math.ceil(state.students.length / state.rowsPerPage));
+    state.currentPage = Math.min(state.currentPage, totalPages);
     renderManageTable();
   }
 
+  function handleManageTableInput(event) {
+    const input = event.target.closest("input[data-field][data-index]");
+    if (!input) {
+      return;
+    }
+    const index = Number(input.dataset.index);
+    const field = input.dataset.field;
+    if (!Number.isInteger(index) || index < 0 || index >= state.students.length || !field) {
+      return;
+    }
+    state.students[index][field] = input.value;
+  }
+
+  function handleRowsPerPageChange() {
+    syncCurrentPageToState();
+    const next = Number(el.rowsPerPageSelect ? el.rowsPerPageSelect.value : state.rowsPerPage);
+    if (next !== 20 && next !== 50 && next !== 100) {
+      return;
+    }
+    state.rowsPerPage = next;
+    state.currentPage = 1;
+    renderManageTable();
+  }
+
+  function goToPrevPage() {
+    if (state.currentPage <= 1) {
+      return;
+    }
+    syncCurrentPageToState();
+    state.currentPage -= 1;
+    renderManageTable();
+  }
+
+  function goToNextPage() {
+    const totalPages = Math.max(1, Math.ceil(state.students.length / state.rowsPerPage));
+    if (state.currentPage >= totalPages) {
+      return;
+    }
+    syncCurrentPageToState();
+    state.currentPage += 1;
+    renderManageTable();
+  }
+
+  function toggleAdminPanelVisibility() {
+    setAdminPanelHidden(!state.isPanelHiddenInManage);
+  }
+
+  function setAdminPanelHidden(isHidden) {
+    state.isPanelHiddenInManage = Boolean(isHidden);
+    el.panel.hidden = state.isPanelHiddenInManage;
+    updateAdminPanelToggleLabel();
+  }
+
+  function updateAdminPanelToggleLabel() {
+    if (!el.toggleAdminPanelBtn) {
+      return;
+    }
+    el.toggleAdminPanelBtn.textContent = state.isPanelHiddenInManage
+      ? "Tunjuk Panel Admin"
+      : "Sembunyi Panel Admin";
+  }
+
   function addStudentRow() {
-    syncTableToState();
+    syncCurrentPageToState();
     state.students.push(emptyStudentRow());
+    state.currentPage = Math.max(1, Math.ceil(state.students.length / state.rowsPerPage));
     renderManageTable();
   }
 
   async function saveManagedStudents() {
     try {
-      syncTableToState();
+      syncCurrentPageToState();
 
       const cleaned = state.students
         .map(normalizeStudentRow)
@@ -230,19 +348,18 @@
   }
 
   function syncTableToState() {
-    const rows = [...el.manageTbody.querySelectorAll("tr")];
-    state.students = rows.map((tr) => {
-      const get = (field) => {
-        const input = tr.querySelector(`input[data-field="${field}"]`);
-        return input ? input.value : "";
-      };
-      return normalizeStudentRow({
-        nama: get("nama"),
-        jantina: get("jantina"),
-        kelas: get("kelas"),
-        no_kad_pengenalan: get("no_kad_pengenalan"),
-        email_google_classroom: get("email_google_classroom"),
-      });
+    syncCurrentPageToState();
+  }
+
+  function syncCurrentPageToState() {
+    const inputs = [...el.manageTbody.querySelectorAll("input[data-field][data-index]")];
+    inputs.forEach((input) => {
+      const index = Number(input.dataset.index);
+      const field = input.dataset.field;
+      if (!Number.isInteger(index) || index < 0 || index >= state.students.length || !field) {
+        return;
+      }
+      state.students[index][field] = input.value;
     });
   }
 

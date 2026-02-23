@@ -48,6 +48,21 @@
     <section id="studentManageSection" class="card" hidden>
       <h2>Pengurusan Senarai Murid</h2>
       <p class="warning-text">Perubahan akan terus digunakan oleh Masuk Data dan Statistik selepas simpan.</p>
+      <div class="manage-controls">
+        <button id="toggleAdminPanelBtn" type="button" class="save-btn secondary-btn">Tunjuk Panel Admin</button>
+        <div class="pagination-controls" aria-label="Kawalan pagination senarai murid">
+          <label for="manageRowsPerPage">Papar</label>
+          <select id="manageRowsPerPage">
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+          <span>baris</span>
+          <button id="managePrevPageBtn" type="button" class="mini-btn secondary-btn">Sebelum</button>
+          <span id="managePageInfo">Halaman 1 / 1</span>
+          <button id="manageNextPageBtn" type="button" class="mini-btn secondary-btn">Seterusnya</button>
+        </div>
+      </div>
       <div class="table-wrap">
         <table id="studentManageTable" class="manage-table">
           <thead>
