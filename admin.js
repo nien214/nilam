@@ -1336,7 +1336,7 @@
 
       const toAdd = newStudents.filter((r) => !currentByNoKad.has(r.no_kad_pengenalan));
       const toRemove = currentNamelist.filter(
-        (r) => r.no_kad_pengenalan && !newByNoKad.has(r.no_kad_pengenalan)
+        (r) => !r.no_kad_pengenalan || !newByNoKad.has(r.no_kad_pengenalan)
       );
       const toUpdateKelas = newStudents
         .filter((r) => currentByNoKad.has(r.no_kad_pengenalan) &&
