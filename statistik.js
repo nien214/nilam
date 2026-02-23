@@ -39,6 +39,8 @@
 
   const state = {
     records: [],
+    students: [],
+    allowedStudentKeysByClass: new Map(),
     allClasses: [],
     classes: [],
     selectedYear: String(new Date().getFullYear()),
@@ -53,6 +55,8 @@
     try {
       const data = await window.NILAM_DATA.loadAllData();
       state.records = data.records;
+      state.students = Array.isArray(data.students) ? data.students : [];
+      state.allowedStudentKeysByClass = buildAllowedStudentKeysByClass(state.students);
       state.allClasses = [...data.studentsByClass.keys()].sort(
         (a, b) => a.localeCompare(b, "ms")
       );
@@ -174,9 +178,10 @@
       return row.bulan === state.selectedMonth;
     });
 
+    const masterFilteredRecords = filterRecordsByMasterList(periodRecords);
     const tingkatanRecords = state.selectedTingkatan === "__all__"
-      ? periodRecords
-      : periodRecords.filter((row) => classToTingkatan(row.kelas) === state.selectedTingkatan);
+      ? masterFilteredRecords
+      : masterFilteredRecords.filter((row) => classToTingkatan(row.kelas) === state.selectedTingkatan);
 
     renderSummaryTable(tingkatanRecords, isAllClasses, state.selectedClass);
 
@@ -807,6 +812,47 @@
         </tbody>
       </table>
     `;
+  }
+
+  function normalizeKeyText(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function buildAllowedStudentKeysByClass(students) {
+    const map = new Map();
+    (Array.isArray(students) ? students : []).forEach((row) => {
+      const kelas = String(row.kelas || "").trim();
+      const nama = normalizeKeyText(row.nama);
+      const noKad = normalizeKeyText(row.no_kad_pengenalan);
+      if (!kelas || !nama) {
+        return;
+      }
+      if (!map.has(kelas)) {
+        map.set(kelas, new Set());
+      }
+      const keys = map.get(kelas);
+      keys.add(`nm:${nama}`);
+      if (noKad) {
+        keys.add(`ic:${noKad}`);
+      }
+    });
+    return map;
+  }
+
+  function filterRecordsByMasterList(records) {
+    return (Array.isArray(records) ? records : []).filter((row) => {
+      const kelas = String(row.kelas || "").trim();
+      const keys = state.allowedStudentKeysByClass.get(kelas);
+      if (!keys || !keys.size) {
+        return false;
+      }
+      const nama = normalizeKeyText(row.nama);
+      const noKad = normalizeKeyText(row.no_kad_pengenalan);
+      if (noKad && keys.has(`ic:${noKad}`)) {
+        return true;
+      }
+      return nama ? keys.has(`nm:${nama}`) : false;
+    });
   }
 
   function classToTingkatan(kelasValue) {
