@@ -157,14 +157,14 @@
   function renderTable() {
     if (!state.selectedClass) {
       el.tbody.innerHTML =
-        '<tr><td colspan="11" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
+        '<tr><td colspan="13" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
       return;
     }
 
     const students = state.rawStudents.filter((s) => s.kelas === state.selectedClass);
     if (!students.length) {
       el.tbody.innerHTML =
-        '<tr><td colspan="11" class="empty">Tiada murid untuk kelas ini.</td></tr>';
+        '<tr><td colspan="13" class="empty">Tiada murid untuk kelas ini.</td></tr>';
       return;
     }
 
@@ -188,6 +188,8 @@
             <td>${numericInput("bahasa_inggeris")}</td>
             <td>${numericInput("lain_lain_bahasa")}</td>
             <td><span class="cell-total" data-col="jumlah_aktiviti">0</span></td>
+            <td><span class="cell-total" data-col="jumlah_tahun">—</span></td>
+            <td><span class="cell-total" data-col="jumlah_all_time">—</span></td>
           </tr>
         `;
       })
@@ -312,6 +314,7 @@
       setStatus(
         "Rekod disimpan dalam localStorage (fallback). Isi `config.js` untuk simpan ke Supabase."
       );
+      loadAndApplyTotals(state.selectedYear, config).catch(() => {});
       return;
     }
 
@@ -339,6 +342,7 @@
 
       saveLocal(records);
       setStatus(`Berjaya simpan ${records.length} rekod ke Supabase.`);
+      loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     } catch (error) {
       console.error(error);
       saveLocal(records);
@@ -348,6 +352,7 @@
         ).slice(0, 180)})`,
         true
       );
+      loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     }
   }
 
@@ -371,22 +376,23 @@
       classStudentCount
     );
 
+    const config = window.NILAM_CONFIG || {};
+
     try {
-      const savedRecords = await loadSavedRecords(
-        state.selectedYear,
-        state.selectedMonth,
-        state.selectedClass
-      );
+      const [savedRecords, totals] = await Promise.all([
+        loadSavedRecords(state.selectedYear, state.selectedMonth, state.selectedClass),
+        loadTotals(state.selectedYear, config),
+      ]);
       if (requestSeq !== state.prefillRequestSeq) {
         return;
       }
-      if (!savedRecords.length) {
-        return;
-      }
 
-      applySavedRecordsToTable(savedRecords);
-      const latestClassCount = state.rawStudents.filter((s) => s.kelas === state.selectedClass).length;
-      setPrefillLoadedStatus(state.selectedClass, state.selectedMonth, state.selectedYear, latestClassCount);
+      if (savedRecords.length) {
+        applySavedRecordsToTable(savedRecords);
+        const latestClassCount = state.rawStudents.filter((s) => s.kelas === state.selectedClass).length;
+        setPrefillLoadedStatus(state.selectedClass, state.selectedMonth, state.selectedYear, latestClassCount);
+      }
+      applyTotalsToTable(totals.yearTotals, totals.allTimeTotals);
     } catch (error) {
       if (requestSeq !== state.prefillRequestSeq) {
         return;
@@ -470,6 +476,101 @@
     }
   }
 
+  function loadLocalRecordsForYear(year) {
+    const all = [];
+    const prefix = `nilam_records_${year}_`;
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefix)) {
+        all.push(...parseStoredRecords(localStorage.getItem(key)));
+      }
+    }
+    return all;
+  }
+
+  function loadAllLocalRecords() {
+    const all = [];
+    const prefix = "nilam_records_";
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefix)) {
+        all.push(...parseStoredRecords(localStorage.getItem(key)));
+      }
+    }
+    return all;
+  }
+
+  function computeTotalsMap(records) {
+    const map = new Map();
+    records.forEach((r) => {
+      const noKad = String(r.no_kad_pengenalan || "").trim();
+      if (!noKad) {
+        return;
+      }
+      map.set(noKad, (map.get(noKad) || 0) + (Number(r.jumlah_aktiviti) || 0));
+    });
+    return map;
+  }
+
+  async function fetchTotalsFromSupabase(year, config) {
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const params = new URLSearchParams({ select: "no_kad_pengenalan,jumlah_aktiviti", limit: "10000" });
+    if (year) {
+      params.set("tahun", `eq.${year}`);
+    }
+    const response = await fetch(`${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`, {
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Ralat muat jumlah Supabase (${response.status})`);
+    }
+    return response.json();
+  }
+
+  async function loadTotals(year, config) {
+    if (config.supabaseUrl && config.supabaseAnonKey) {
+      try {
+        const [yearRecords, allRecords] = await Promise.all([
+          fetchTotalsFromSupabase(year, config),
+          fetchTotalsFromSupabase(null, config),
+        ]);
+        return {
+          yearTotals: computeTotalsMap(yearRecords),
+          allTimeTotals: computeTotalsMap(allRecords),
+        };
+      } catch (error) {
+        console.error("Gagal muat jumlah dari Supabase, guna localStorage", error);
+      }
+    }
+    return {
+      yearTotals: computeTotalsMap(loadLocalRecordsForYear(year)),
+      allTimeTotals: computeTotalsMap(loadAllLocalRecords()),
+    };
+  }
+
+  function applyTotalsToTable(yearTotals, allTimeTotals) {
+    const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
+    rows.forEach((row) => {
+      const noKad = String(row.dataset.noKad || "").trim();
+      const yrCell = row.querySelector('[data-col="jumlah_tahun"]');
+      const atCell = row.querySelector('[data-col="jumlah_all_time"]');
+      if (yrCell) {
+        yrCell.textContent = String(yearTotals.get(noKad) || 0);
+      }
+      if (atCell) {
+        atCell.textContent = String(allTimeTotals.get(noKad) || 0);
+      }
+    });
+  }
+
+  async function loadAndApplyTotals(year, config) {
+    const totals = await loadTotals(year, config);
+    applyTotalsToTable(totals.yearTotals, totals.allTimeTotals);
+  }
+
   async function loadSavedRecordsFromSupabase(year, month, config) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
@@ -500,14 +601,12 @@
     const config = window.NILAM_CONFIG || {};
     const selectedYear = String(new Date().getFullYear());
     let localStudents = [];
-    let hasLocalOverride = false;
     const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
         const parsed = JSON.parse(overrideRaw);
         if (Array.isArray(parsed)) {
           localStudents = parsed;
-          hasLocalOverride = true;
         }
       } catch (error) {
         console.error("Gagal parse namelist override", error);
@@ -520,18 +619,11 @@
 
     const normalizedLocal = normalizeStudents(localStudents);
 
-    // If admin has explicitly set a local override, use it as the authoritative
-    // source without merging with Supabase (which may still contain removed students
-    // since upsert never deletes rows).
-    if (hasLocalOverride && normalizedLocal.length) {
-      return normalizedLocal;
-    }
-
     try {
       const supabaseStudents = await loadStudentsFromSupabase(config, selectedYear);
       const normalizedSupabase = normalizeStudents(supabaseStudents);
       if (normalizedSupabase.length) {
-        return mergeStudentsByNoKad(normalizedSupabase, normalizedLocal);
+        return normalizedSupabase;
       }
     } catch (error) {
       console.error("Gagal muat senarai murid dari Supabase", error);
@@ -575,6 +667,7 @@
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
       select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField}`,
+      active: "neq.false",
       order: "nama_murid.asc",
       limit: "50000",
     });

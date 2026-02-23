@@ -1060,6 +1060,7 @@
         jantina: row.jantina,
         email_google_classroom: row.email_google_classroom,
         [kelasField]: row.kelas,
+        active: true,
       }));
 
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
@@ -1069,7 +1070,7 @@
       Authorization: `Bearer ${config.supabaseAnonKey}`,
     };
 
-    // Upsert all students in the current list.
+    // Upsert all active students.
     if (payload.length) {
       const upsertRes = await fetch(`${supabaseUrl}/rest/v1/nilam_students?on_conflict=no_kad_pengenalan`, {
         method: "POST",
@@ -1082,16 +1083,21 @@
       }
     }
 
-    // Delete rows in Supabase that are no longer in the current list.
+    // Soft-delete removed students (active=false) instead of deleting,
+    // to avoid FK constraint violations from nilam_records references.
     const keepIcs = payload.map((r) => r.no_kad_pengenalan).join(",");
     if (keepIcs) {
-      const deleteRes = await fetch(
+      const deactivateRes = await fetch(
         `${supabaseUrl}/rest/v1/nilam_students?no_kad_pengenalan=not.in.(${keepIcs})`,
-        { method: "DELETE", headers }
+        {
+          method: "PATCH",
+          headers: { ...headers, Prefer: "return=minimal" },
+          body: JSON.stringify({ active: false }),
+        }
       );
-      if (!deleteRes.ok) {
-        const detail = await deleteRes.text();
-        throw new Error(`Padam murid lama dari Supabase gagal (${deleteRes.status}): ${detail}`);
+      if (!deactivateRes.ok) {
+        const detail = await deactivateRes.text();
+        throw new Error(`Kemaskini status murid lama gagal (${deactivateRes.status}): ${detail}`);
       }
     }
   }
