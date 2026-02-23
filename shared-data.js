@@ -94,6 +94,41 @@
     return map;
   }
 
+  function buildAllowedKeysByClass(students) {
+    const map = new Map();
+    (Array.isArray(students) ? students : []).forEach((row) => {
+      const kelas = normalizeText(row.kelas);
+      const nama = normalizeText(row.nama).toLowerCase();
+      const noKad = normalizeText(row.no_kad_pengenalan);
+      if (!kelas || !nama) {
+        return;
+      }
+      if (!map.has(kelas)) {
+        map.set(kelas, new Set());
+      }
+      const keys = map.get(kelas);
+      keys.add(`nm:${nama}`);
+      if (noKad) {
+        keys.add(`ic:${noKad}`);
+      }
+    });
+    return map;
+  }
+
+  function recordMatchesMaster(row, allowedByClass) {
+    const kelas = normalizeText(row.kelas);
+    const keys = allowedByClass.get(kelas);
+    if (!keys || !keys.size) {
+      return false;
+    }
+    const noKad = normalizeText(row.no_kad_pengenalan);
+    if (noKad && keys.has(`ic:${noKad}`)) {
+      return true;
+    }
+    const nama = normalizeText(row.nama).toLowerCase();
+    return nama ? keys.has(`nm:${nama}`) : false;
+  }
+
   function parseTimestamp(value) {
     const time = Date.parse(value || "");
     return Number.isFinite(time) ? time : 0;
@@ -272,7 +307,10 @@
       console.error(error);
     }
 
-    const records = dedupeRecords([...supabaseRecords, ...localRecords]);
+    const allowedByClass = buildAllowedKeysByClass(students);
+    const records = dedupeRecords([...supabaseRecords, ...localRecords]).filter((row) =>
+      recordMatchesMaster(row, allowedByClass)
+    );
     return {
       months: MONTHS,
       inputColumns: INPUT_COLUMNS,

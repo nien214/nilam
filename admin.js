@@ -416,7 +416,10 @@
       updateUndoBtn();
       renderManageTable();
       await upsertStudentsToSupabase(toSave);
-      setStatus(`Senarai murid berjaya disimpan: ${toSave.length} murid.`);
+      const purgeResult = await syncRecordsToMasterList(toSave);
+      setStatus(
+        `Senarai murid berjaya disimpan: ${toSave.length} murid. Data murid yang dibuang telah dipadam (Local: ${purgeResult.localDeleted}, Supabase: ${purgeResult.supabaseDeleted}).`
+      );
     } catch (error) {
       console.error(error);
       setStatus(error.message || "Gagal simpan senarai murid.", true);
@@ -520,7 +523,10 @@
         renderManageTable();
       }
       await upsertStudentsToSupabase(namelist);
-      setStatus(`Namelist berjaya diimport: ${namelist.length} murid.`);
+      const purgeResult = await syncRecordsToMasterList(namelist);
+      setStatus(
+        `Namelist berjaya diimport: ${namelist.length} murid. Data murid yang dibuang telah dipadam (Local: ${purgeResult.localDeleted}, Supabase: ${purgeResult.supabaseDeleted}).`
+      );
     } catch (error) {
       console.error(error);
       setStatus(error.message || "Import namelist gagal.", true);
@@ -1113,6 +1119,137 @@
     }
   }
 
+  function buildAllowedKeysByClass(students) {
+    const map = new Map();
+    (Array.isArray(students) ? students : [])
+      .map(normalizeStudentRow)
+      .forEach((row) => {
+        if (!row.kelas || !row.nama) {
+          return;
+        }
+        if (!map.has(row.kelas)) {
+          map.set(row.kelas, new Set());
+        }
+        const keys = map.get(row.kelas);
+        keys.add(`nm:${row.nama.toLowerCase()}`);
+        if (row.no_kad_pengenalan) {
+          keys.add(`ic:${normalizeNoKad(row.no_kad_pengenalan)}`);
+        }
+      });
+    return map;
+  }
+
+  function isRecordAllowedByMaster(row, allowedByClass) {
+    const kelas = String(row?.kelas || "").trim();
+    if (!kelas) {
+      return false;
+    }
+    const keys = allowedByClass.get(kelas);
+    if (!keys || !keys.size) {
+      return false;
+    }
+    const noKad = normalizeNoKad(row?.no_kad_pengenalan);
+    if (noKad && keys.has(`ic:${noKad}`)) {
+      return true;
+    }
+    const nama = String(row?.nama || "").trim().toLowerCase();
+    return nama ? keys.has(`nm:${nama}`) : false;
+  }
+
+  function purgeLocalRecordsByMaster(students) {
+    const allowedByClass = buildAllowedKeysByClass(students);
+    let deletedCount = 0;
+
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith("nilam_records_")) {
+        continue;
+      }
+      const parsed = parseStoredRecords(localStorage.getItem(key));
+      if (!parsed.length) {
+        continue;
+      }
+      const kept = parsed.filter((row) => isRecordAllowedByMaster(row, allowedByClass));
+      if (kept.length === parsed.length) {
+        continue;
+      }
+      deletedCount += parsed.length - kept.length;
+      if (kept.length) {
+        localStorage.setItem(key, JSON.stringify(kept));
+      } else {
+        localStorage.removeItem(key);
+      }
+    }
+
+    return deletedCount;
+  }
+
+  async function purgeSupabaseRecordsByMaster(students, config) {
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return 0;
+    }
+
+    const allowedByClass = buildAllowedKeysByClass(students);
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const headers = {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
+    };
+
+    const params = new URLSearchParams({
+      select: "id,kelas,nama,no_kad_pengenalan",
+      limit: "50000",
+    });
+    const listRes = await fetch(`${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`, {
+      method: "GET",
+      headers,
+    });
+    if (!listRes.ok) {
+      const detail = await listRes.text();
+      throw new Error(`Gagal semak rekod Supabase (${listRes.status}): ${detail}`);
+    }
+
+    const rows = await listRes.json();
+    const removableIds = (Array.isArray(rows) ? rows : [])
+      .filter((row) => !isRecordAllowedByMaster(row, allowedByClass))
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+
+    if (!removableIds.length) {
+      return 0;
+    }
+
+    const batchSize = 300;
+    for (let i = 0; i < removableIds.length; i += batchSize) {
+      const batch = removableIds.slice(i, i + batchSize);
+      const deleteRes = await fetch(`${supabaseUrl}/rest/v1/nilam_records?id=in.(${batch.join(",")})`, {
+        method: "DELETE",
+        headers: {
+          ...headers,
+          Prefer: "return=minimal",
+        },
+      });
+      if (!deleteRes.ok) {
+        const detail = await deleteRes.text();
+        throw new Error(`Gagal padam rekod Supabase (${deleteRes.status}): ${detail}`);
+      }
+    }
+
+    return removableIds.length;
+  }
+
+  async function syncRecordsToMasterList(students) {
+    const localDeleted = purgeLocalRecordsByMaster(students);
+    let supabaseDeleted = 0;
+    const config = window.NILAM_CONFIG || {};
+    try {
+      supabaseDeleted = await purgeSupabaseRecordsByMaster(students, config);
+    } catch (error) {
+      console.error(error);
+    }
+    return { localDeleted, supabaseDeleted };
+  }
+
   function getCurrentNamelist() {
     const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
@@ -1466,7 +1603,10 @@
         renderManageTable();
       }
       await upsertStudentsToSupabase(finalList);
-      setStatus(`Senarai nama dikemas kini: ${finalList.length} murid.`);
+      const purgeResult = await syncRecordsToMasterList(finalList);
+      setStatus(
+        `Senarai nama dikemas kini: ${finalList.length} murid. Data murid yang dibuang telah dipadam (Local: ${purgeResult.localDeleted}, Supabase: ${purgeResult.supabaseDeleted}).`
+      );
     } catch (error) {
       console.error(error);
       setStatus(error.message || "Gagal kemaskini senarai nama.", true);
