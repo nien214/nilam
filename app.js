@@ -314,6 +314,7 @@
       setStatus(
         "Rekod disimpan dalam localStorage (fallback). Isi `config.js` untuk simpan ke Supabase."
       );
+      showToast("Berjaya disimpan");
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
       return;
     }
@@ -342,6 +343,7 @@
 
       saveLocal(records);
       setStatus(`Berjaya simpan ${records.length} rekod ke Supabase.`);
+      showToast("Berjaya disimpan");
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     } catch (error) {
       console.error(error);
@@ -617,18 +619,39 @@
       localStudents = Array.isArray(window.NILAM_STUDENTS) ? window.NILAM_STUDENTS : [];
     }
 
-    const normalizedLocal = normalizeStudents(localStudents);
-
     try {
-      const supabaseStudents = await loadStudentsFromSupabase(config, selectedYear);
-      const normalizedSupabase = normalizeStudents(supabaseStudents);
-      if (normalizedSupabase.length) {
-        return normalizedSupabase;
+      const allSupabaseRows = await loadStudentsFromSupabase(config, selectedYear);
+
+      // ICs explicitly deactivated by admin — never re-add from local.
+      const deactivatedIcs = new Set(
+        allSupabaseRows
+          .filter((r) => r.active === false)
+          .map((r) => r.no_kad_pengenalan)
+          .filter(Boolean)
+      );
+
+      // Active Supabase students (kelas may be null → filtered by normalizeStudents,
+      // those gaps are filled from local below).
+      const normalizedSupabase = normalizeStudents(
+        allSupabaseRows.filter((r) => r.active !== false)
+      );
+
+      // Local fallback, minus deactivated students.
+      const normalizedLocal = normalizeStudents(
+        localStudents.filter((r) => {
+          const ic = String(r.no_kad_pengenalan || "").trim();
+          return !ic || !deactivatedIcs.has(ic);
+        })
+      );
+
+      if (allSupabaseRows.length || deactivatedIcs.size) {
+        return mergeStudentsByNoKad(normalizedSupabase, normalizedLocal);
       }
     } catch (error) {
       console.error("Gagal muat senarai murid dari Supabase", error);
     }
 
+    const normalizedLocal = normalizeStudents(localStudents);
     if (normalizedLocal.length) {
       return normalizedLocal;
     }
@@ -666,8 +689,7 @@
     const kelasField = `kelas_${safeYear}`;
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
-      select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField}`,
-      active: "neq.false",
+      select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField},active`,
       order: "nama_murid.asc",
       limit: "50000",
     });
@@ -696,6 +718,7 @@
       no_kad_pengenalan: String(row.no_kad_pengenalan || "").trim(),
       jantina: String(row.jantina || "").trim(),
       email_google_classroom: String(row.email_google_classroom || "").trim(),
+      active: row.active,
     }));
   }
 
@@ -1023,6 +1046,28 @@
   function setStatus(message, isError) {
     el.status.textContent = message;
     el.status.style.color = isError ? "#b00020" : "";
+  }
+
+  let toastTimer = null;
+  function showToast(message) {
+    const toast = document.getElementById("saveToast");
+    if (!toast) {
+      return;
+    }
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+    }
+    toast.textContent = message;
+    toast.classList.remove("toast-hide");
+    toast.hidden = false;
+    toastTimer = setTimeout(() => {
+      toast.classList.add("toast-hide");
+      toastTimer = setTimeout(() => {
+        toast.hidden = true;
+        toast.classList.remove("toast-hide");
+        toastTimer = null;
+      }, 400);
+    }, 2200);
   }
 
   function setStatusHtml(messageHtml, isError) {

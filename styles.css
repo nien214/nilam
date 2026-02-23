@@ -327,6 +327,15 @@ td:nth-child(11) {
   width: calc((100% - 62ch) / 9);
 }
 
+#studentTable th:nth-child(11),
+#studentTable td:nth-child(11),
+#studentTable th:nth-child(12),
+#studentTable td:nth-child(12),
+#studentTable th:nth-child(13),
+#studentTable td:nth-child(13) {
+  text-align: center;
+}
+
 #studentTable thead th {
   position: sticky;
   top: 0;
@@ -686,6 +695,32 @@ tbody tr:hover > td {
 
 .compare-list li {
   margin-bottom: 0.15rem;
+}
+
+.save-toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  background: var(--accent);
+  color: #fff;
+  padding: 0.6rem 1.4rem;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  z-index: 9999;
+  opacity: 1;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.save-toast[hidden] {
+  display: none;
+}
+
+.save-toast.toast-hide {
+  opacity: 0;
+  transform: translateX(-50%) translateY(0.5rem);
 }
 
 .modal-backdrop {

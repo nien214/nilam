@@ -50,19 +50,39 @@
       localRaw = Array.isArray(window.NILAM_STUDENTS) ? window.NILAM_STUDENTS : [];
     }
 
-    const localStudents = normalizeStudents(localRaw);
-
     try {
-      const supabaseStudents = await getSupabaseStudents(config, selectedYear);
-      const normalizedSupabase = normalizeStudents(supabaseStudents);
-      if (normalizedSupabase.length) {
-        return normalizedSupabase;
+      const allSupabaseRows = await getSupabaseStudents(config, selectedYear);
+
+      // ICs explicitly deactivated by admin — never re-add from local.
+      const deactivatedIcs = new Set(
+        allSupabaseRows
+          .filter((r) => r.active === false)
+          .map((r) => normalizeText(r.no_kad_pengenalan))
+          .filter(Boolean)
+      );
+
+      // Active Supabase students (kelas may be null → filtered by normalizeStudents,
+      // those gaps are filled from local below).
+      const normalizedSupabase = normalizeStudents(
+        allSupabaseRows.filter((r) => r.active !== false)
+      );
+
+      // Local fallback, minus deactivated students.
+      const normalizedLocal = normalizeStudents(
+        localRaw.filter((r) => {
+          const ic = normalizeText(r.no_kad_pengenalan);
+          return !ic || !deactivatedIcs.has(ic);
+        })
+      );
+
+      if (allSupabaseRows.length || deactivatedIcs.size) {
+        return mergeStudentsByNoKad(normalizedSupabase, normalizedLocal);
       }
     } catch (error) {
       console.error("Gagal muat senarai murid dari Supabase", error);
     }
 
-    return localStudents;
+    return normalizeStudents(localRaw);
   }
 
   function normalizeStudents(raw) {
@@ -258,8 +278,7 @@
     const kelasField = `kelas_${safeYear}`;
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
-      select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField}`,
-      active: "neq.false",
+      select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField},active`,
       order: "nama_murid.asc",
       limit: "50000",
     });
@@ -289,6 +308,7 @@
       no_kad_pengenalan: normalizeText(row.no_kad_pengenalan),
       jantina: normalizeText(row.jantina),
       email_google_classroom: normalizeText(row.email_google_classroom),
+      active: row.active,
     }));
   }
 
