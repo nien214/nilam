@@ -48,13 +48,55 @@
 
   init();
 
+  // Load students from localStorage override / bundled data immediately (no network).
+  function getLocalStudentsFast() {
+    const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
+    if (overrideRaw) {
+      try {
+        const parsed = JSON.parse(overrideRaw);
+        if (Array.isArray(parsed) && parsed.length) {
+          return normalizeStudents(parsed);
+        }
+      } catch (_) {}
+    }
+    const bundled = Array.isArray(window.NILAM_STUDENTS) ? window.NILAM_STUDENTS : [];
+    return normalizeStudents(bundled);
+  }
+
   async function init() {
     initYearField();
     initMonthDropdown();
     bindEvents();
+
+    // Phase 1 — show local data instantly (no network wait).
+    const localStudents = getLocalStudentsFast();
+    if (localStudents.length) {
+      hydrateStudents(localStudents);
+      setStatus(`${localStudents.length} murid dipaparkan (data tempatan). Memuatkan dari cloud...`);
+    }
+
+    // Phase 2 — fetch Supabase in background and refresh silently.
     try {
       const students = await loadStudents();
-      hydrateStudents(students);
+      const prevClass = state.selectedClass;
+      if (prevClass) {
+        // User already selected a class — update student list without resetting the table.
+        state.rawStudents = [...students].sort((a, b) => {
+          const byKelas = a.kelas.localeCompare(b.kelas, "ms");
+          return byKelas !== 0 ? byKelas : a.nama.localeCompare(b.nama, "ms");
+        });
+        el.kelas.innerHTML = '<option value="">Pilih kelas</option>';
+        initClassDropdown(state.rawStudents);
+        if (students.some((s) => s.kelas === prevClass)) {
+          el.kelas.value = prevClass;
+          state.selectedClass = prevClass;
+        } else {
+          state.selectedClass = "";
+        }
+      } else {
+        hydrateStudents(students);
+      }
+
       const syncResult = await autoSyncLocalRecordsToSupabase();
       if (syncResult.mode === "local_only") {
         setStatus(
@@ -80,7 +122,7 @@
       }
       setStatus(`Data murid berjaya dimuatkan: ${students.length} murid.`);
     } catch (error) {
-      setStatus("Gagal memuatkan data murid. Semak `students-data.js` atau fail CSV.", true);
+      setStatus("Gagal memuatkan data murid dari cloud. Data tempatan digunakan.", true);
       console.error(error);
     }
   }
@@ -621,33 +663,17 @@
     return Array.isArray(records) ? records : [];
   }
 
-  // Returns students without IC from the localStorage namelist override.
-  // These cannot be stored in Supabase (no primary key) so they are kept locally.
-  function getLocalNoIcStudents() {
-    const raw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return normalizeStudents(parsed.filter((r) => !String(r.no_kad_pengenalan || "").trim()));
-      }
-    } catch (_) {}
-    return [];
-  }
-
   async function loadStudents() {
     const config = window.NILAM_CONFIG || {};
     const selectedYear = String(new Date().getFullYear());
 
-    // No-IC students can't live in Supabase — supplement from localStorage override.
-    const noIcStudents = getLocalNoIcStudents();
-
-    // Supabase is always authoritative — active=neq.false is filtered server-side.
+    // Supabase is always authoritative — active=neq.false filtered server-side.
+    // No-IC students are stored with synthetic NOIC_ IDs in Supabase.
     try {
       const supabaseStudents = await loadStudentsFromSupabase(config, selectedYear);
       const normalized = normalizeStudents(supabaseStudents);
-      if (normalized.length || noIcStudents.length) {
-        return [...normalized, ...noIcStudents];
+      if (normalized.length) {
+        return normalized;
       }
     } catch (error) {
       console.error("Gagal muat senarai murid dari Supabase", error);

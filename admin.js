@@ -243,7 +243,7 @@
           <td><input type="text" data-field="nama" data-index="${originalIndex}" value="${escapeAttr(row.nama)}"></td>
           <td><input type="text" data-field="jantina" data-index="${originalIndex}" value="${escapeAttr(row.jantina)}"></td>
           <td><input type="text" data-field="kelas" data-index="${originalIndex}" value="${escapeAttr(row.kelas)}"></td>
-          <td><input type="text" data-field="no_kad_pengenalan" data-index="${originalIndex}" value="${escapeAttr(row.no_kad_pengenalan)}"></td>
+          <td><input type="text" data-field="no_kad_pengenalan" data-index="${originalIndex}" value="${escapeAttr(row.no_kad_pengenalan.startsWith("NOIC_") ? "" : row.no_kad_pengenalan)}"></td>
           <td><input type="text" data-field="email_google_classroom" data-index="${originalIndex}" value="${escapeAttr(row.email_google_classroom)}"></td>
           <td><button type="button" class="mini-btn danger-btn" data-remove-index="${originalIndex}">Buang</button></td>
         </tr>
@@ -393,13 +393,16 @@
       const toSave = state.students
         .map(normalizeStudentRow)
         .filter((row) => {
-          if (!row.nama || !row.kelas || !row.no_kad_pengenalan) {
+          if (!row.nama || !row.kelas) {
             return false;
           }
-          if (noKadSet.has(row.no_kad_pengenalan)) {
-            throw new Error(`No. Kad Pengenalan berulang dikesan: ${row.no_kad_pengenalan}`);
+          // Skip real-IC duplicate check; synthetic ICs (NOIC_) are generated later.
+          if (row.no_kad_pengenalan && !row.no_kad_pengenalan.startsWith("NOIC_")) {
+            if (noKadSet.has(row.no_kad_pengenalan)) {
+              throw new Error(`No. Kad Pengenalan berulang dikesan: ${row.no_kad_pengenalan}`);
+            }
+            noKadSet.add(row.no_kad_pengenalan);
           }
-          noKadSet.add(row.no_kad_pengenalan);
           return true;
         });
 
@@ -1044,6 +1047,14 @@
     return Math.max(0, Math.min(999, Math.trunc(number)));
   }
 
+  // Generates a deterministic synthetic IC for students without one.
+  // Prefixed with NOIC_ so it's distinguishable from real IC numbers.
+  function syntheticNoKad(row) {
+    const kelas = String(row.kelas || "").trim().toUpperCase().replace(/\s+/g, "");
+    const nama = String(row.nama || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 30);
+    return `NOIC_${kelas}_${nama}`;
+  }
+
   async function upsertStudentsToSupabase(students) {
     const config = window.NILAM_CONFIG || {};
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
@@ -1053,9 +1064,9 @@
     const year = String(new Date().getFullYear());
     const kelasField = `kelas_${year}`;
     const payload = students
-      .filter((row) => row.no_kad_pengenalan)
+      .filter((row) => row.nama && row.kelas)
       .map((row) => ({
-        no_kad_pengenalan: row.no_kad_pengenalan,
+        no_kad_pengenalan: row.no_kad_pengenalan || syntheticNoKad(row),
         nama_murid: row.nama,
         jantina: row.jantina,
         email_google_classroom: row.email_google_classroom,
@@ -1345,10 +1356,13 @@
         throw new Error("Tiada murid sah ditemui dalam CSV.");
       }
 
-      // Match by IC when present, else fall back to normalised name.
+      // Match by IC when present (and not synthetic), else fall back to normalised name.
       function studentKey(r) {
         const ic = String(r.no_kad_pengenalan || "").trim();
-        return ic || `__name__${String(r.nama || "").trim().toLowerCase()}`;
+        if (ic && !ic.startsWith("NOIC_")) {
+          return ic;
+        }
+        return `__name__${String(r.nama || "").trim().toLowerCase()}`;
       }
 
       const currentNamelist = getCurrentNamelist().map(normalizeStudentRow);
