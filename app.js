@@ -533,18 +533,45 @@
 
   async function loadSavedRecords(year, month, kelas) {
     const config = window.NILAM_CONFIG || {};
+    const localRecords = loadSavedRecordsFromLocal(year, month);
     if (config.supabaseUrl && config.supabaseAnonKey) {
       try {
-        const records = await loadSavedRecordsFromSupabase(year, month, config);
-        if (records.length) {
-          return records;
+        const supabaseRecords = await loadSavedRecordsFromSupabase(year, month, config);
+        if (supabaseRecords.length || localRecords.length) {
+          return mergeSavedRecords(supabaseRecords, localRecords);
         }
       } catch (error) {
         console.error(error);
       }
     }
 
-    return loadSavedRecordsFromLocal(year, month);
+    return localRecords;
+  }
+
+  function mergeSavedRecords(supabaseRecords, localRecords) {
+    const mergedByKey = new Map();
+    const put = (record) => {
+      const key = `${String(record?.tahun || "").trim()}|${String(record?.bulan || "").trim()}|${String(
+        record?.no_kad_pengenalan || ""
+      ).trim()}`;
+      if (key.endsWith("|")) {
+        return;
+      }
+      const existing = mergedByKey.get(key);
+      if (!existing) {
+        mergedByKey.set(key, record);
+        return;
+      }
+      const currentTs = Date.parse(existing.updated_at_client || "") || 0;
+      const nextTs = Date.parse(record.updated_at_client || "") || 0;
+      if (nextTs >= currentTs) {
+        mergedByKey.set(key, record);
+      }
+    };
+
+    (Array.isArray(supabaseRecords) ? supabaseRecords : []).forEach(put);
+    (Array.isArray(localRecords) ? localRecords : []).forEach(put);
+    return [...mergedByKey.values()];
   }
 
   function loadSavedRecordsFromLocal(year, month) {
