@@ -22,6 +22,7 @@
     bulan: document.getElementById("statBulan"),
     tingkatan: document.getElementById("statTingkatan"),
     kelas: document.getElementById("statKelas"),
+    includeAinsCheckbox: document.getElementById("statIncludeAinsJumlah"),
     status: document.getElementById("statStatus"),
     pieTitle: document.getElementById("pieTitle"),
     languageTitle: document.getElementById("languageTitle"),
@@ -50,6 +51,7 @@
     selectedMonth: "",
     selectedTingkatan: "__all__",
     selectedClass: "",
+    includeAinsInJumlah: true,
   };
 
   init();
@@ -150,6 +152,13 @@
       state.selectedClass = el.kelas.value;
       renderAll();
     });
+    if (el.includeAinsCheckbox) {
+      el.includeAinsCheckbox.checked = true;
+      el.includeAinsCheckbox.addEventListener("change", () => {
+        state.includeAinsInJumlah = Boolean(el.includeAinsCheckbox.checked);
+        renderAll();
+      });
+    }
   }
 
   function renderAll() {
@@ -555,13 +564,15 @@
   }
 
   function computeJumlahBacaan(row) {
-    return (
+    const withoutAins =
       Number(row.bahan_digital || 0) +
       Number(row.bahan_bukan_buku || 0) +
       Number(row.fiksyen || 0) +
-      Number(row.bukan_fiksyen || 0) +
-      Number(row.ains || 0)
-    );
+      Number(row.bukan_fiksyen || 0);
+    if (!state.includeAinsInJumlah) {
+      return withoutAins;
+    }
+    return withoutAins + Number(row.ains || 0);
   }
 
   function renderPie(records) {
@@ -720,7 +731,7 @@
       if (!totals.has(tingkatan)) {
         return;
       }
-      totals.set(tingkatan, totals.get(tingkatan) + Number(row.jumlah_aktiviti || 0));
+      totals.set(tingkatan, totals.get(tingkatan) + computeJumlahBacaan(row));
     });
     const rows = TINGKATAN_ORDER.map((code) => ({
       code,
@@ -773,13 +784,7 @@
       const key = String(row.no_kad_pengenalan || row.nama || "").trim();
       const nama = String(row.nama || "").trim();
       const kelas = String(row.kelas || "").trim();
-      const jumlah = Number.isFinite(Number(row.jumlah_aktiviti))
-        ? Number(row.jumlah_aktiviti)
-        : Number(row.bahan_digital || 0) +
-          Number(row.bahan_bukan_buku || 0) +
-          Number(row.fiksyen || 0) +
-          Number(row.bukan_fiksyen || 0) +
-          Number(row.ains || 0);
+      const jumlah = computeJumlahBacaan(row);
 
       if (!totalsByStudent.has(key)) {
         totalsByStudent.set(key, { nama, kelas, jumlah: 0 });
@@ -862,7 +867,7 @@
         return;
       }
       const rowMap = matrix.get(code);
-      rowMap.set(kelas, (rowMap.get(kelas) || 0) + Number(row.jumlah_aktiviti || 0));
+      rowMap.set(kelas, (rowMap.get(kelas) || 0) + computeJumlahBacaan(row));
     });
 
     const maxValue = Math.max(

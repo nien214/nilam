@@ -256,6 +256,18 @@ button:hover {
   margin-top: 0.6rem;
 }
 
+.jumlah-toggle {
+  margin: 0.5rem 0 0.75rem;
+  color: #244751;
+  font-weight: 600;
+}
+
+.jumlah-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

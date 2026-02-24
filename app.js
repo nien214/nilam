@@ -34,6 +34,7 @@
     selectedYear: String(new Date().getFullYear()),
     selectedClass: "",
     selectedMonth: "",
+    includeAinsInJumlah: true,
     prefillRequestSeq: 0,
   };
 
@@ -43,6 +44,7 @@
     kelas: document.getElementById("kelas"),
     tbody: document.querySelector("#studentTable tbody"),
     status: document.getElementById("status"),
+    includeAinsCheckbox: document.getElementById("includeAinsJumlah"),
     saveAll: document.getElementById("saveAll"),
     saveAllBottom: document.getElementById("saveAllBottom"),
   };
@@ -140,6 +142,15 @@
         await renderTableAndPrefill();
       }
     });
+    if (el.includeAinsCheckbox) {
+      el.includeAinsCheckbox.checked = true;
+      el.includeAinsCheckbox.addEventListener("change", async () => {
+        state.includeAinsInJumlah = Boolean(el.includeAinsCheckbox.checked);
+        recalculateVisibleJumlahAktiviti();
+        const config = window.NILAM_CONFIG || {};
+        await loadAndApplyTotals(state.selectedYear, config);
+      });
+    }
 
     if (el.saveAll) {
       el.saveAll.addEventListener("click", saveAllRecords);
@@ -293,13 +304,19 @@
   }
 
   function updateJumlahAktiviti(row) {
-    const bahanDigital = getNumberFromCell(row, "bahan_digital");
-    const bahanBukanBuku = getNumberFromCell(row, "bahan_bukan_buku");
-    const fiksyen = getNumberFromCell(row, "fiksyen");
-    const bukanFiksyen = getNumberFromCell(row, "bukan_fiksyen");
-    const ains = getNumberFromCell(row, "ains");
-    const total = bahanDigital + bahanBukanBuku + fiksyen + bukanFiksyen + ains;
+    const total = computeJumlahBacaanFromRecord({
+      bahan_digital: getNumberFromCell(row, "bahan_digital"),
+      bahan_bukan_buku: getNumberFromCell(row, "bahan_bukan_buku"),
+      fiksyen: getNumberFromCell(row, "fiksyen"),
+      bukan_fiksyen: getNumberFromCell(row, "bukan_fiksyen"),
+      ains: getNumberFromCell(row, "ains"),
+    });
     row.querySelector('[data-col="jumlah_aktiviti"]').textContent = String(total);
+  }
+
+  function recalculateVisibleJumlahAktiviti() {
+    const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
+    rows.forEach((row) => updateJumlahAktiviti(row));
   }
 
   function getNumberFromCell(row, colName) {
@@ -645,13 +662,15 @@
   }
 
   function computeJumlahBacaanFromRecord(row) {
-    return (
+    const withoutAins =
       clampNilamNumber(row?.bahan_digital) +
       clampNilamNumber(row?.bahan_bukan_buku) +
       clampNilamNumber(row?.fiksyen) +
-      clampNilamNumber(row?.bukan_fiksyen) +
-      clampNilamNumber(row?.ains)
-    );
+      clampNilamNumber(row?.bukan_fiksyen);
+    if (!state.includeAinsInJumlah) {
+      return withoutAins;
+    }
+    return withoutAins + clampNilamNumber(row?.ains);
   }
 
   async function fetchTotalsFromSupabase(year, config) {
