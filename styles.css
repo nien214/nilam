@@ -91,6 +91,22 @@ body {
   background: var(--accent);
 }
 
+.top-nav-logout {
+  margin-left: auto;
+  border: 1px solid #de6f6e;
+  background: #ed8b8a;
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.top-nav-logout:hover {
+  background: #de6f6e;
+}
+
 .eyebrow {
   margin: 0;
   font-weight: 700;
@@ -454,6 +470,67 @@ td:nth-child(11) {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.35rem;
+}
+
+.admin-action-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.admin-action-btn {
+  width: 230px;
+  text-align: center;
+}
+
+.info-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 1px solid #9aa7ad;
+  color: #415a63;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: #fff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.info-badge:focus-visible {
+  outline: 2px solid #0f8b8d;
+  outline-offset: 1px;
+}
+
+.info-popover {
+  position: absolute;
+  left: calc(100% + 0.4rem);
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(380px, 70vw);
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid #f4c7b9;
+  background: #fff8f5;
+  color: #9a3412;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 5;
+}
+
+.info-badge:hover .info-popover,
+.info-badge:focus .info-popover,
+.info-badge.is-open .info-popover {
+  opacity: 1;
+  visibility: visible;
 }
 
 .warning-text {
@@ -820,9 +897,30 @@ tbody tr:hover > td {
     justify-content: center;
   }
 
-  .top-nav a {
+  .top-nav a,
+  .top-nav-logout {
     padding: 0.4rem 0.65rem;
     font-size: 0.82rem;
+  }
+
+  .top-nav-logout {
+    margin-left: 0;
+  }
+
+  .admin-action-btn {
+    width: 100%;
+  }
+
+  .admin-action-row {
+    width: 100%;
+  }
+
+  .info-popover {
+    left: auto;
+    right: 0;
+    top: calc(100% + 0.35rem);
+    transform: none;
+    width: min(88vw, 340px);
   }
 }
 

@@ -21,6 +21,7 @@
         <a href="status-pengisian.html">Status Pengisian</a>
         <a href="statistik.html">Statistik</a>
         <a href="admin.html" class="active" aria-current="page">Admin</a>
+        <button id="logoutBtn" type="button" class="top-nav-logout" hidden>Logout</button>
       </nav>
     </header>
 
@@ -33,27 +34,45 @@
     <section id="adminPanel" class="card" hidden>
       <h2>Panel Admin</h2>
       <div class="admin-actions">
-        <button id="importNamelistBtn" type="button" class="save-btn">Import Namelist (.csv)</button>
-        <input id="namelistFileInput" type="file" accept=".csv,text/csv" hidden>
-        <p class="warning-text">Warning: This will overwrites the current namelist.</p>
+        <button id="manageStudentsBtn" type="button" class="save-btn admin-action-btn">Pengurusan Senarai Murid</button>
 
-        <button id="importDataBtn" type="button" class="save-btn">Import Data (.csv)</button>
-        <input id="dataFileInput" type="file" accept=".csv,text/csv" hidden>
-        <p class="warning-text">Import data akan merge ikut Tahun + Bulan + No. Kad Pengenalan. Jika data wujud, nilai baharu akan override.</p>
-
-        <button id="importAinsBtn" type="button" class="save-btn">Import Data AINS (.csv)</button>
-        <input id="ainsFileInput" type="file" accept=".csv,text/csv" hidden>
-        <p class="warning-text">Import Data AINS akan padankan Nama + ID DELIMa (Email Google Classroom), kemudian override nilai AINS untuk Tahun + Bulan dipilih.</p>
-
-        <button id="resetDataBtn" type="button" class="save-btn danger-btn">Reset All Data</button>
-        <p class="warning-text">Warning: This will deletes all the data, not namelist.</p>
-
-        <button id="manageStudentsBtn" type="button" class="save-btn">Pengurusan senarai murid</button>
-
-        <button id="compareNamelistBtn" type="button" class="save-btn">Banding Senarai Nama</button>
+        <button id="compareNamelistBtn" type="button" class="save-btn admin-action-btn">Banding Senarai Nama</button>
         <input id="compareFileInput" type="file" accept=".csv,text/csv" hidden>
 
-        <button id="logoutBtn" type="button" class="save-btn secondary-btn">Logout</button>
+        <div class="admin-action-row">
+          <button id="importNamelistBtn" type="button" class="save-btn admin-action-btn">Import Senarai Nama</button>
+          <span class="info-badge" tabindex="0" role="button" aria-label="Info Import Senarai Nama" aria-expanded="false">
+            i
+            <span class="info-popover">Warning: This will overwrites the current namelist.</span>
+          </span>
+        </div>
+        <input id="namelistFileInput" type="file" accept=".csv,text/csv" hidden>
+
+        <div class="admin-action-row">
+          <button id="importDataBtn" type="button" class="save-btn admin-action-btn">Import Data</button>
+          <span class="info-badge" tabindex="0" role="button" aria-label="Info Import Data" aria-expanded="false">
+            i
+            <span class="info-popover">Import data akan merge ikut Tahun + Bulan + No. Kad Pengenalan. Jika data wujud, nilai baharu akan override.</span>
+          </span>
+        </div>
+        <input id="dataFileInput" type="file" accept=".csv,text/csv" hidden>
+
+        <div class="admin-action-row">
+          <button id="importAinsBtn" type="button" class="save-btn admin-action-btn">Import Data AINS</button>
+          <span class="info-badge" tabindex="0" role="button" aria-label="Info Import Data AINS" aria-expanded="false">
+            i
+            <span class="info-popover">Import Data AINS akan padankan Nama + ID DELIMa (Email Google Classroom), kemudian override nilai AINS untuk Tahun + Bulan dipilih.</span>
+          </span>
+        </div>
+        <input id="ainsFileInput" type="file" accept=".csv,text/csv" hidden>
+
+        <div class="admin-action-row">
+          <button id="resetDataBtn" type="button" class="save-btn danger-btn admin-action-btn">Hapus Semua Data</button>
+          <span class="info-badge" tabindex="0" role="button" aria-label="Info Hapus Semua Data" aria-expanded="false">
+            i
+            <span class="info-popover">Warning: This will deletes all the data, not namelist.</span>
+          </span>
+        </div>
       </div>
     </section>
 
@@ -107,6 +126,24 @@
 
     <p id="adminStatus" role="status" aria-live="polite"></p>
   </main>
+
+  <div id="loginModal" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
+      <h3 id="loginModalTitle">Login Admin</h3>
+      <div class="inline-fields">
+        <label for="adminUsernameInput">Username</label>
+        <input id="adminUsernameInput" type="text" autocomplete="username">
+      </div>
+      <div class="inline-fields">
+        <label for="adminPasswordInput">Password</label>
+        <input id="adminPasswordInput" type="password" autocomplete="current-password">
+      </div>
+      <div class="table-actions">
+        <button id="cancelLoginBtn" type="button" class="save-btn secondary-btn">Batal</button>
+        <button id="submitLoginBtn" type="button" class="save-btn">Login</button>
+      </div>
+    </div>
+  </div>
 
   <div id="importDataModal" class="modal-backdrop" hidden>
     <div class="modal-card">

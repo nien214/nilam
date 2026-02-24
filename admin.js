@@ -44,6 +44,11 @@
     loginInfo: document.getElementById("adminLoginInfo"),
     panel: document.getElementById("adminPanel"),
     loginBtn: document.getElementById("loginBtn"),
+    loginModal: document.getElementById("loginModal"),
+    usernameInput: document.getElementById("adminUsernameInput"),
+    passwordInput: document.getElementById("adminPasswordInput"),
+    submitLoginBtn: document.getElementById("submitLoginBtn"),
+    cancelLoginBtn: document.getElementById("cancelLoginBtn"),
     importBtn: document.getElementById("importNamelistBtn"),
     fileInput: document.getElementById("namelistFileInput"),
     importDataBtn: document.getElementById("importDataBtn"),
@@ -88,6 +93,7 @@
     }
     updateAdminPanelToggleLabel();
     bindEvents();
+    initInfoBadges();
     if (sessionStorage.getItem(AUTH_SESSION_KEY) === "1") {
       showPanel();
     } else {
@@ -97,6 +103,21 @@
 
   function bindEvents() {
     el.loginBtn.addEventListener("click", requestLogin);
+    if (el.submitLoginBtn) {
+      el.submitLoginBtn.addEventListener("click", submitLogin);
+    }
+    if (el.cancelLoginBtn) {
+      el.cancelLoginBtn.addEventListener("click", cancelLogin);
+    }
+    if (el.loginModal) {
+      el.loginModal.addEventListener("click", handleLoginModalClick);
+    }
+    if (el.usernameInput) {
+      el.usernameInput.addEventListener("keydown", handleLoginInputKeydown);
+    }
+    if (el.passwordInput) {
+      el.passwordInput.addEventListener("keydown", handleLoginInputKeydown);
+    }
     el.importBtn.addEventListener("click", startImport);
     el.fileInput.addEventListener("change", handleImportFile);
     el.importDataBtn.addEventListener("click", startImportData);
@@ -154,35 +175,82 @@
   }
 
   function requestLogin() {
-    const username = window.prompt("Admin Username:", "");
-    if (username === null) {
-      setStatus("Login dibatalkan.", true);
-      showLoginOnly();
+    showLoginOnly();
+    openLoginDialog();
+  }
+
+  function openLoginDialog() {
+    if (!el.loginModal) {
       return;
     }
+    el.loginModal.hidden = false;
+    if (el.usernameInput) {
+      el.usernameInput.value = "";
+      el.usernameInput.focus();
+    }
+    if (el.passwordInput) {
+      el.passwordInput.value = "";
+    }
+  }
 
-    const password = window.prompt("Admin Password:", "");
-    if (password === null) {
-      setStatus("Login dibatalkan.", true);
-      showLoginOnly();
+  function closeLoginDialog() {
+    if (!el.loginModal) {
       return;
     }
+    el.loginModal.hidden = true;
+  }
 
+  function cancelLogin() {
+    closeLoginDialog();
+    showLoginOnly();
+    setStatus("Login dibatalkan.", true);
+  }
+
+  function submitLogin() {
+    const username = el.usernameInput ? String(el.usernameInput.value || "").trim() : "";
+    const password = el.passwordInput ? String(el.passwordInput.value || "") : "";
     if (username === AUTH_USER && password === AUTH_PASS) {
+      closeLoginDialog();
       sessionStorage.setItem(AUTH_SESSION_KEY, "1");
       showPanel();
       setStatus("Login berjaya.");
       return;
     }
-
+    if (el.passwordInput) {
+      el.passwordInput.value = "";
+      el.passwordInput.focus();
+    }
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     showLoginOnly();
     setStatus("Username atau password tidak sah.", true);
   }
 
+  function handleLoginModalClick(event) {
+    if (event.target !== el.loginModal) {
+      return;
+    }
+    cancelLogin();
+  }
+
+  function handleLoginInputKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelLogin();
+      return;
+    }
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    submitLogin();
+  }
+
   function showPanel() {
     el.loginInfo.hidden = true;
     el.panel.hidden = false;
+    if (el.logoutBtn) {
+      el.logoutBtn.hidden = false;
+    }
     state.isPanelHiddenInManage = false;
     updateAdminPanelToggleLabel();
     loadStudentsForManage();
@@ -191,12 +259,50 @@
   function showLoginOnly() {
     el.loginInfo.hidden = false;
     el.panel.hidden = true;
+    if (el.logoutBtn) {
+      el.logoutBtn.hidden = true;
+    }
     if (el.manageSection) {
       el.manageSection.hidden = true;
     }
     state.isPanelHiddenInManage = false;
     updateAdminPanelToggleLabel();
     state.isManageOpen = false;
+  }
+
+  function initInfoBadges() {
+    const badges = Array.from(document.querySelectorAll(".info-badge"));
+    if (!badges.length) {
+      return;
+    }
+
+    const closeAll = () => {
+      badges.forEach((badge) => {
+        badge.classList.remove("is-open");
+        badge.setAttribute("aria-expanded", "false");
+      });
+    };
+
+    badges.forEach((badge) => {
+      badge.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const isOpen = badge.classList.contains("is-open");
+        closeAll();
+        if (!isOpen) {
+          badge.classList.add("is-open");
+          badge.setAttribute("aria-expanded", "true");
+        }
+      });
+      badge.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        badge.click();
+      });
+    });
+
+    document.addEventListener("click", closeAll);
   }
 
   function logout() {
