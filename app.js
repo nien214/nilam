@@ -254,7 +254,7 @@
             <td>${numericInput("bahasa_melayu")}</td>
             <td>${numericInput("bahasa_inggeris")}</td>
             <td>${numericInput("lain_lain_bahasa")}</td>
-            <td>${numericInput("ains", true)}</td>
+            <td><span class="cell-total" data-col="ains">0</span></td>
             <td><span class="cell-total" data-col="jumlah_aktiviti">0</span></td>
             <td><span class="cell-total" data-col="jumlah_tahun">—</span></td>
             <td><span class="cell-total" data-col="jumlah_all_time">—</span></td>
@@ -304,20 +304,26 @@
 
   function getNumberFromCell(row, colName) {
     const input = row.querySelector(`input[data-col="${colName}"]`);
-    return Number(input.value) || 0;
+    if (input) {
+      return Number(input.value) || 0;
+    }
+    const span = row.querySelector(`span[data-col="${colName}"]`);
+    return Number(span?.textContent || 0) || 0;
   }
 
   function setNumberToCell(row, colName, value) {
     const input = row.querySelector(`input[data-col="${colName}"]`);
-    if (!input) {
-      return;
-    }
     const number = Number(value);
-    if (!Number.isFinite(number)) {
-      input.value = "0";
+    const safe = Number.isFinite(number) ? String(Math.max(0, Math.min(999, Math.trunc(number)))) : "0";
+    if (input) {
+      input.value = safe;
       return;
     }
-    input.value = String(Math.max(0, Math.min(999, Math.trunc(number))));
+    const span = row.querySelector(`span[data-col="${colName}"]`);
+    if (!span) {
+      return;
+    }
+    span.textContent = safe;
   }
 
   function collectCurrentRows() {
