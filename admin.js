@@ -653,8 +653,16 @@
   }
 
   function startImportAins() {
+    const now = new Date();
     state.pendingImportType = "ains";
-    openImportDataDialog();
+    state.pendingImportYear = String(now.getFullYear());
+    state.pendingImportMonth = MONTHS[now.getMonth()];
+    if (!el.ainsFileInput) {
+      setStatus("Input fail untuk import AINS tidak ditemui.", true);
+      return;
+    }
+    el.ainsFileInput.value = "";
+    el.ainsFileInput.click();
   }
 
   function initImportMonthOptions() {
