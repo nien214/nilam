@@ -22,6 +22,7 @@
     "bahan_bukan_buku",
     "fiksyen",
     "bukan_fiksyen",
+    "ains",
     "bahasa_melayu",
     "bahasa_inggeris",
     "lain_lain_bahasa",
@@ -191,7 +192,7 @@
     resetClassDropdown();
     initClassDropdown(state.rawStudents);
     el.tbody.innerHTML =
-      '<tr><td colspan="11" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
+      '<tr><td colspan="14" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
   }
 
   async function refreshStudentsPreserveSelectedClass() {
@@ -223,14 +224,14 @@
   function renderTable() {
     if (!state.selectedClass) {
       el.tbody.innerHTML =
-        '<tr><td colspan="13" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
+        '<tr><td colspan="14" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
       return;
     }
 
     const students = state.rawStudents.filter((s) => s.kelas === state.selectedClass);
     if (!students.length) {
       el.tbody.innerHTML =
-        '<tr><td colspan="13" class="empty">Tiada murid untuk kelas ini.</td></tr>';
+        '<tr><td colspan="14" class="empty">Tiada murid untuk kelas ini.</td></tr>';
       return;
     }
 
@@ -253,6 +254,7 @@
             <td>${numericInput("bahasa_melayu")}</td>
             <td>${numericInput("bahasa_inggeris")}</td>
             <td>${numericInput("lain_lain_bahasa")}</td>
+            <td>${numericInput("ains", true)}</td>
             <td><span class="cell-total" data-col="jumlah_aktiviti">0</span></td>
             <td><span class="cell-total" data-col="jumlah_tahun">—</span></td>
             <td><span class="cell-total" data-col="jumlah_all_time">—</span></td>
@@ -265,8 +267,9 @@
     attachRowInputHandlers();
   }
 
-  function numericInput(colName) {
-    return `<input type="number" min="0" max="999" step="1" value="0" data-col="${colName}">`;
+  function numericInput(colName, readOnly = false) {
+    const roAttr = readOnly ? " readonly" : "";
+    return `<input type="number" min="0" max="999" step="1" value="0" data-col="${colName}"${roAttr}>`;
   }
 
   function attachRowInputHandlers() {
@@ -290,10 +293,12 @@
   }
 
   function updateJumlahAktiviti(row) {
-    const bm = getNumberFromCell(row, "bahasa_melayu");
-    const bi = getNumberFromCell(row, "bahasa_inggeris");
-    const lain = getNumberFromCell(row, "lain_lain_bahasa");
-    const total = bm + bi + lain;
+    const bahanDigital = getNumberFromCell(row, "bahan_digital");
+    const bahanBukanBuku = getNumberFromCell(row, "bahan_bukan_buku");
+    const fiksyen = getNumberFromCell(row, "fiksyen");
+    const bukanFiksyen = getNumberFromCell(row, "bukan_fiksyen");
+    const ains = getNumberFromCell(row, "ains");
+    const total = bahanDigital + bahanBukanBuku + fiksyen + bukanFiksyen + ains;
     row.querySelector('[data-col="jumlah_aktiviti"]').textContent = String(total);
   }
 
@@ -355,6 +360,7 @@
         bahan_bukan_buku: getNumberFromCell(row, "bahan_bukan_buku"),
         fiksyen: getNumberFromCell(row, "fiksyen"),
         bukan_fiksyen: getNumberFromCell(row, "bukan_fiksyen"),
+        ains: getNumberFromCell(row, "ains"),
         bahasa_melayu: getNumberFromCell(row, "bahasa_melayu"),
         bahasa_inggeris: getNumberFromCell(row, "bahasa_inggeris"),
         lain_lain_bahasa: getNumberFromCell(row, "lain_lain_bahasa"),
@@ -600,14 +606,27 @@
       if (!noKad) {
         return;
       }
-      map.set(noKad, (map.get(noKad) || 0) + (Number(r.jumlah_aktiviti) || 0));
+      map.set(noKad, (map.get(noKad) || 0) + computeJumlahBacaanFromRecord(r));
     });
     return map;
   }
 
+  function computeJumlahBacaanFromRecord(row) {
+    return (
+      clampNilamNumber(row?.bahan_digital) +
+      clampNilamNumber(row?.bahan_bukan_buku) +
+      clampNilamNumber(row?.fiksyen) +
+      clampNilamNumber(row?.bukan_fiksyen) +
+      clampNilamNumber(row?.ains)
+    );
+  }
+
   async function fetchTotalsFromSupabase(year, config) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
-    const params = new URLSearchParams({ select: "no_kad_pengenalan,jumlah_aktiviti", limit: "10000" });
+    const params = new URLSearchParams({
+      select: "no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,jumlah_aktiviti",
+      limit: "10000",
+    });
     if (year) {
       params.set("tahun", `eq.${year}`);
     }
@@ -668,7 +687,7 @@
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
       select:
-        "tahun,no_kad_pengenalan,nama,kelas,bulan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
+        "tahun,no_kad_pengenalan,nama,kelas,bulan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
       tahun: `eq.${year}`,
       bulan: `eq.${month}`,
       order: "updated_at_client.desc",
@@ -1035,13 +1054,14 @@
     const bahanBukanBuku = clampNilamNumber(row?.bahan_bukan_buku);
     const fiksyen = clampNilamNumber(row?.fiksyen);
     const bukanFiksyen = clampNilamNumber(row?.bukan_fiksyen);
+    const ains = clampNilamNumber(row?.ains);
     const bahasaMelayu = clampNilamNumber(row?.bahasa_melayu);
     const bahasaInggeris = clampNilamNumber(row?.bahasa_inggeris);
     const lainLainBahasa = clampNilamNumber(row?.lain_lain_bahasa);
     const jumlahAsal = Number(row?.jumlah_aktiviti);
     const jumlahAktiviti = Number.isFinite(jumlahAsal)
-      ? clampNilamNumber(jumlahAsal, 2997)
-      : bahasaMelayu + bahasaInggeris + lainLainBahasa;
+      ? clampNilamNumber(jumlahAsal, 4995)
+      : bahanDigital + bahanBukanBuku + fiksyen + bukanFiksyen + ains;
     const bilFromRow = Number(row?.bil);
     const bil = Number.isFinite(bilFromRow) && bilFromRow > 0 ? Math.trunc(bilFromRow) : bilFallback;
 
@@ -1056,6 +1076,7 @@
       bahan_bukan_buku: bahanBukanBuku,
       fiksyen,
       bukan_fiksyen: bukanFiksyen,
+      ains,
       bahasa_melayu: bahasaMelayu,
       bahasa_inggeris: bahasaInggeris,
       lain_lain_bahasa: lainLainBahasa,

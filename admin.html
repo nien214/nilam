@@ -41,6 +41,10 @@
         <input id="dataFileInput" type="file" accept=".csv,text/csv" hidden>
         <p class="warning-text">Import data akan merge ikut Tahun + Bulan + No. Kad Pengenalan. Jika data wujud, nilai baharu akan override.</p>
 
+        <button id="importAinsBtn" type="button" class="save-btn">Import Data AINS (.csv)</button>
+        <input id="ainsFileInput" type="file" accept=".csv,text/csv" hidden>
+        <p class="warning-text">Import Data AINS akan padankan Nama + ID DELIMa (Email Google Classroom), kemudian override nilai AINS untuk Tahun + Bulan dipilih.</p>
+
         <button id="resetDataBtn" type="button" class="save-btn danger-btn">Reset All Data</button>
         <p class="warning-text">Warning: This will deletes all the data, not namelist.</p>
 

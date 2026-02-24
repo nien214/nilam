@@ -727,7 +727,11 @@
       const kelas = String(row.kelas || "").trim();
       const jumlah = Number.isFinite(Number(row.jumlah_aktiviti))
         ? Number(row.jumlah_aktiviti)
-        : Number(row.bahasa_melayu || 0) + Number(row.bahasa_inggeris || 0) + Number(row.lain_lain_bahasa || 0);
+        : Number(row.bahan_digital || 0) +
+          Number(row.bahan_bukan_buku || 0) +
+          Number(row.fiksyen || 0) +
+          Number(row.bukan_fiksyen || 0) +
+          Number(row.ains || 0);
 
       if (!totalsByStudent.has(key)) {
         totalsByStudent.set(key, { nama, kelas, jumlah: 0 });

@@ -21,6 +21,7 @@
     "bahan_bukan_buku",
     "fiksyen",
     "bukan_fiksyen",
+    "ains",
     "bahasa_melayu",
     "bahasa_inggeris",
     "lain_lain_bahasa",
@@ -220,7 +221,12 @@
     if (Number.isFinite(jumlah)) {
       out.jumlah_aktiviti = Math.max(0, Math.trunc(jumlah));
     } else {
-      out.jumlah_aktiviti = out.bahasa_melayu + out.bahasa_inggeris + out.lain_lain_bahasa;
+      out.jumlah_aktiviti =
+        out.bahan_digital +
+        out.bahan_bukan_buku +
+        out.fiksyen +
+        out.bukan_fiksyen +
+        out.ains;
     }
 
     return out;
@@ -266,7 +272,7 @@
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
       select:
-        "tahun,bulan,kelas,nama,no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
+        "tahun,bulan,kelas,nama,no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
       limit: "50000",
       order: "updated_at_client.desc",
     });

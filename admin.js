@@ -30,6 +30,7 @@
     rowsPerPage: 20,
     pendingImportYear: "",
     pendingImportMonth: "",
+    pendingImportType: "",
     undoStack: [],
     searchQuery: "",
     pendingCompareResult: null,
@@ -47,6 +48,8 @@
     fileInput: document.getElementById("namelistFileInput"),
     importDataBtn: document.getElementById("importDataBtn"),
     dataFileInput: document.getElementById("dataFileInput"),
+    importAinsBtn: document.getElementById("importAinsBtn"),
+    ainsFileInput: document.getElementById("ainsFileInput"),
     importDataModal: document.getElementById("importDataModal"),
     importYearInput: document.getElementById("importYearInput"),
     importMonthSelect: document.getElementById("importMonthSelect"),
@@ -98,6 +101,12 @@
     el.fileInput.addEventListener("change", handleImportFile);
     el.importDataBtn.addEventListener("click", startImportData);
     el.dataFileInput.addEventListener("change", handleImportDataFile);
+    if (el.importAinsBtn) {
+      el.importAinsBtn.addEventListener("click", startImportAins);
+    }
+    if (el.ainsFileInput) {
+      el.ainsFileInput.addEventListener("change", handleImportAinsFile);
+    }
     el.confirmImportDataBtn.addEventListener("click", confirmImportDataSelection);
     el.cancelImportDataBtn.addEventListener("click", closeImportDataDialog);
     el.resetBtn.addEventListener("click", resetAllData);
@@ -639,6 +648,12 @@
   }
 
   function startImportData() {
+    state.pendingImportType = "data";
+    openImportDataDialog();
+  }
+
+  function startImportAins() {
+    state.pendingImportType = "ains";
     openImportDataDialog();
   }
 
@@ -691,6 +706,15 @@
     state.pendingImportYear = year;
     state.pendingImportMonth = month;
     closeImportDataDialog();
+    if (state.pendingImportType === "ains") {
+      if (!el.ainsFileInput) {
+        setStatus("Input fail untuk import AINS tidak ditemui.", true);
+        return;
+      }
+      el.ainsFileInput.value = "";
+      el.ainsFileInput.click();
+      return;
+    }
     el.dataFileInput.value = "";
     el.dataFileInput.click();
   }
@@ -740,6 +764,71 @@
     } finally {
       state.pendingImportYear = "";
       state.pendingImportMonth = "";
+      state.pendingImportType = "";
+      event.target.value = "";
+    }
+  }
+
+  async function handleImportAinsFile(event) {
+    const [file] = event.target.files || [];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const year = state.pendingImportYear;
+      const month = state.pendingImportMonth;
+      if (!year || !month) {
+        throw new Error("Tahun/Bulan import AINS tiada. Sila klik butang Import Data AINS semula.");
+      }
+
+      const text = await file.text();
+      const rows = parseCsv(text);
+      const parsed = parseImportedAinsRows(rows, year, month);
+      if (!parsed.records.length) {
+        throw new Error(
+          "Tiada padanan data AINS ditemui. Pastikan Nama dan ID DELIMa sama dengan namelist."
+        );
+      }
+
+      const existingLocal = readAllLocalRecords();
+      const existingByKey = new Map(
+        existingLocal.map((row) => [
+          `${row.tahun}|${row.bulan}|${normalizeNoKad(row.no_kad_pengenalan)}`,
+          row,
+        ])
+      );
+      const ainsOverrideRecords = parsed.records.map((row) =>
+        buildRecordWithAinsOverride(row, existingByKey)
+      );
+      const mergedRecords = mergeRecordsByNoKad(year, month, ainsOverrideRecords);
+      persistLocalRecords(mergedRecords);
+
+      let syncNote = "";
+      try {
+        await upsertImportedRecordsToSupabase(ainsOverrideRecords);
+        syncNote = " Data AINS juga disimpan ke Supabase.";
+      } catch (syncError) {
+        console.error(syncError);
+        syncNote = " Simpanan Supabase gagal, tetapi data AINS telah disimpan ke local.";
+      }
+
+      const unmatchedNote = parsed.unmatchedCount
+        ? ` ${parsed.unmatchedCount} baris tidak dipadankan (Nama + ID DELIMa).`
+        : "";
+      setStatus(
+        `Import Data AINS berjaya: ${parsed.records.length} rekod untuk ${year} ${month} telah di-override.${unmatchedNote}${syncNote}`
+      );
+      showPopupStatus("Berjaya disimpan", false);
+    } catch (error) {
+      console.error(error);
+      const message = error.message || "Import Data AINS gagal.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
+    } finally {
+      state.pendingImportYear = "";
+      state.pendingImportMonth = "";
+      state.pendingImportType = "";
       event.target.value = "";
     }
   }
@@ -844,6 +933,7 @@
     const bahanBukanBukuColumn = resolveColumnName(rows, ["bahan bukan buku"]);
     const fiksyenColumn = resolveColumnName(rows, ["fiksyen"]);
     const bukanFiksyenColumn = resolveColumnName(rows, ["bukan fiksyen"]);
+    const ainsColumn = resolveColumnName(rows, ["ains"]);
     const bmColumn = resolveColumnName(rows, ["bahasa melayu"]);
     const biColumn = resolveColumnName(rows, ["bahasa inggeris"]);
     const lainColumn = resolveColumnName(rows, ["lain-lain bahasa", "lain lain bahasa"]);
@@ -880,10 +970,11 @@
       const bahanBukanBuku = toInt999(row[bahanBukanBukuColumn]);
       const fiksyen = toInt999(row[fiksyenColumn]);
       const bukanFiksyen = toInt999(row[bukanFiksyenColumn]);
+      const ains = toInt999(ainsColumn ? row[ainsColumn] : 0);
       const bahasaMelayu = toInt999(row[bmColumn]);
       const bahasaInggeris = toInt999(row[biColumn]);
       const lainLainBahasa = toInt999(row[lainColumn]);
-      const jumlahBacaan = bahasaMelayu + bahasaInggeris + lainLainBahasa;
+      const jumlahBacaan = bahanDigital + bahanBukanBuku + fiksyen + bukanFiksyen + ains;
 
       records.push({
         tahun: year,
@@ -896,6 +987,7 @@
         bahan_bukan_buku: bahanBukanBuku,
         fiksyen,
         bukan_fiksyen: bukanFiksyen,
+        ains,
         bahasa_melayu: bahasaMelayu,
         bahasa_inggeris: bahasaInggeris,
         lain_lain_bahasa: lainLainBahasa,
@@ -917,6 +1009,146 @@
     return {
       records,
       students: dedupeStudentsByNoKad(students),
+    };
+  }
+
+  function parseImportedAinsRows(rows, year, month) {
+    const namaColumn = resolveColumnName(rows, ["nama murid", "nama"]);
+    const emailColumn = resolveColumnName(rows, [
+      "id delima",
+      "id delima murid",
+      "id delima (email google classroom)",
+      "email id google classroom",
+      "email google classroom",
+      "email",
+    ]);
+    const ainsColumn = resolveColumnName(rows, ["ains"]);
+
+    if (!namaColumn || !emailColumn || !ainsColumn) {
+      const availableHeaders = rows.length ? Object.keys(rows[0]).join(", ") : "(tiada header)";
+      throw new Error(
+        `Kolum CSV AINS tidak lengkap. Perlu ada: NAMA MURID, ID DELIMa/Email Google Classroom, dan AINS. Header dikesan: ${availableHeaders}`
+      );
+    }
+
+    const namelist = getCurrentNamelist().map(normalizeStudentRow);
+    const studentByMatchKey = new Map();
+    namelist.forEach((student) => {
+      const matchKey = toStudentMatchKey(student.nama, student.email_google_classroom);
+      if (!matchKey) {
+        return;
+      }
+      if (!studentByMatchKey.has(matchKey)) {
+        studentByMatchKey.set(matchKey, student);
+      }
+    });
+
+    const nowIso = new Date().toISOString();
+    const records = [];
+    let unmatchedCount = 0;
+    rows.forEach((row) => {
+      const namaCsv = String(row[namaColumn] || "").trim();
+      const emailCsv = String(row[emailColumn] || "").trim();
+      const matchKey = toStudentMatchKey(namaCsv, emailCsv);
+      if (!matchKey) {
+        return;
+      }
+
+      const matchedStudent = studentByMatchKey.get(matchKey);
+      if (!matchedStudent || !matchedStudent.kelas || !matchedStudent.nama) {
+        unmatchedCount += 1;
+        return;
+      }
+
+      const noKad = matchedStudent.no_kad_pengenalan || syntheticNoKad(matchedStudent);
+      const ains = toInt999(row[ainsColumn]);
+
+      records.push({
+        tahun: year,
+        bulan: month,
+        bil: 0,
+        no_kad_pengenalan: noKad,
+        nama: matchedStudent.nama,
+        kelas: matchedStudent.kelas,
+        bahan_digital: 0,
+        bahan_bukan_buku: 0,
+        fiksyen: 0,
+        bukan_fiksyen: 0,
+        ains,
+        bahasa_melayu: 0,
+        bahasa_inggeris: 0,
+        lain_lain_bahasa: 0,
+        jumlah_aktiviti: ains,
+        updated_at_client: nowIso,
+      });
+    });
+
+    return {
+      records: dedupeRecordsByNoKad(records),
+      unmatchedCount,
+    };
+  }
+
+  function dedupeRecordsByNoKad(records) {
+    const map = new Map();
+    records.forEach((row) => {
+      const key = `${row.tahun}|${row.bulan}|${normalizeNoKad(row.no_kad_pengenalan)}`;
+      if (key.endsWith("|")) {
+        return;
+      }
+      map.set(key, row);
+    });
+    return [...map.values()];
+  }
+
+  function toStudentMatchKey(nama, emailDelima) {
+    const namaNorm = String(nama || "").trim().toLowerCase();
+    const emailNorm = normalizeDelimaId(emailDelima);
+    if (!namaNorm || !emailNorm) {
+      return "";
+    }
+    return `${namaNorm}|${emailNorm}`;
+  }
+
+  function normalizeDelimaId(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function buildRecordWithAinsOverride(ainsImportRow, existingByKey) {
+    const key = `${ainsImportRow.tahun}|${ainsImportRow.bulan}|${normalizeNoKad(ainsImportRow.no_kad_pengenalan)}`;
+    const existing = existingByKey.get(key) || {};
+    const bahanDigital = toInt999(existing.bahan_digital);
+    const bahanBukanBuku = toInt999(existing.bahan_bukan_buku);
+    const fiksyen = toInt999(existing.fiksyen);
+    const bukanFiksyen = toInt999(existing.bukan_fiksyen);
+    const ains = toInt999(ainsImportRow.ains);
+    const bahasaMelayu = toInt999(existing.bahasa_melayu);
+    const bahasaInggeris = toInt999(existing.bahasa_inggeris);
+    const lainLainBahasa = toInt999(existing.lain_lain_bahasa);
+
+    return {
+      tahun: ainsImportRow.tahun,
+      bulan: ainsImportRow.bulan,
+      bil: Number(existing.bil) > 0 ? Number(existing.bil) : 0,
+      no_kad_pengenalan: normalizeNoKad(ainsImportRow.no_kad_pengenalan),
+      nama: ainsImportRow.nama,
+      kelas: ainsImportRow.kelas,
+      bahan_digital: bahanDigital,
+      bahan_bukan_buku: bahanBukanBuku,
+      fiksyen,
+      bukan_fiksyen: bukanFiksyen,
+      ains,
+      bahasa_melayu: bahasaMelayu,
+      bahasa_inggeris: bahasaInggeris,
+      lain_lain_bahasa: lainLainBahasa,
+      jumlah_aktiviti: computeJumlahBacaan({
+        bahan_digital: bahanDigital,
+        bahan_bukan_buku: bahanBukanBuku,
+        fiksyen,
+        bukan_fiksyen: bukanFiksyen,
+        ains,
+      }),
+      updated_at_client: new Date().toISOString(),
     };
   }
 
@@ -1011,6 +1243,11 @@
       return null;
     }
 
+    const bahanDigital = toInt999(row.bahan_digital);
+    const bahanBukanBuku = toInt999(row.bahan_bukan_buku);
+    const fiksyen = toInt999(row.fiksyen);
+    const bukanFiksyen = toInt999(row.bukan_fiksyen);
+    const ains = toInt999(row.ains);
     const bm = toInt999(row.bahasa_melayu);
     const bi = toInt999(row.bahasa_inggeris);
     const lain = toInt999(row.lain_lain_bahasa);
@@ -1021,19 +1258,36 @@
       no_kad_pengenalan: noKad,
       nama,
       kelas,
-      bahan_digital: toInt999(row.bahan_digital),
-      bahan_bukan_buku: toInt999(row.bahan_bukan_buku),
-      fiksyen: toInt999(row.fiksyen),
-      bukan_fiksyen: toInt999(row.bukan_fiksyen),
+      bahan_digital: bahanDigital,
+      bahan_bukan_buku: bahanBukanBuku,
+      fiksyen,
+      bukan_fiksyen: bukanFiksyen,
+      ains,
       bahasa_melayu: bm,
       bahasa_inggeris: bi,
       lain_lain_bahasa: lain,
       jumlah_aktiviti:
         Number.isFinite(Number(row.jumlah_aktiviti)) && Number(row.jumlah_aktiviti) >= 0
           ? Math.trunc(Number(row.jumlah_aktiviti))
-          : bm + bi + lain,
+          : computeJumlahBacaan({
+              bahan_digital: bahanDigital,
+              bahan_bukan_buku: bahanBukanBuku,
+              fiksyen,
+              bukan_fiksyen: bukanFiksyen,
+              ains,
+            }),
       updated_at_client: row.updated_at_client || new Date().toISOString(),
     };
+  }
+
+  function computeJumlahBacaan(row) {
+    return (
+      toInt999(row?.bahan_digital) +
+      toInt999(row?.bahan_bukan_buku) +
+      toInt999(row?.fiksyen) +
+      toInt999(row?.bukan_fiksyen) +
+      toInt999(row?.ains)
+    );
   }
 
   function extractYearFromKey(key) {
