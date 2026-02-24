@@ -941,7 +941,8 @@
     const bahanBukanBukuColumn = resolveColumnName(rows, ["bahan bukan buku"]);
     const fiksyenColumn = resolveColumnName(rows, ["fiksyen"]);
     const bukanFiksyenColumn = resolveColumnName(rows, ["bukan fiksyen"]);
-    const ainsColumn = resolveColumnName(rows, ["ains"]);
+    // Prefer "Rekod" for AINS import source; keep "AINS" as backward-compatible fallback.
+    const ainsColumn = resolveColumnName(rows, ["rekod", "ains"]);
     const bmColumn = resolveColumnName(rows, ["bahasa melayu"]);
     const biColumn = resolveColumnName(rows, ["bahasa inggeris"]);
     const lainColumn = resolveColumnName(rows, ["lain-lain bahasa", "lain lain bahasa"]);
