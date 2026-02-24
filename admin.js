@@ -1030,12 +1030,15 @@
       "email google classroom",
       "email",
     ]);
-    const ainsColumn = resolveColumnName(rows, ["ains"]);
+    const ainsColumn =
+      resolveColumnName(rows, ["ains", "mata"]) ||
+      resolveColumnName(rows, ["rekod"]) ||
+      resolveColumnName(rows, ["bintang"]);
 
     if (!namaColumn || !emailColumn || !ainsColumn) {
       const availableHeaders = rows.length ? Object.keys(rows[0]).join(", ") : "(tiada header)";
       throw new Error(
-        `Kolum CSV AINS tidak lengkap. Perlu ada: NAMA MURID, ID DELIMa/Email Google Classroom, dan AINS. Header dikesan: ${availableHeaders}`
+        `Kolum CSV AINS tidak lengkap. Perlu ada: NAMA MURID, ID DELIMa/Email Google Classroom, dan salah satu kolum AINS/Mata/Rekod/Bintang. Header dikesan: ${availableHeaders}`
       );
     }
 
