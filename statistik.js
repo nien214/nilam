@@ -174,28 +174,26 @@
     const recentMonthText = getMostRecentMonthText(state.records, state.selectedYear, state.selectedMonth);
     updateChartTitles(classText, periodText, tingkatanText, recentMonthText);
 
-    const periodRecords = state.records
+    const yearlyRecords = state.records
       .map(resolveRecordClassByMaster)
       .filter((row) => {
-      if (String(row.tahun || "") !== state.selectedYear) {
-        return false;
-      }
-      if (isYearMode) {
-        return true;
-      }
-      return row.bulan === state.selectedMonth;
-    });
+        return String(row.tahun || "") === state.selectedYear;
+      });
 
-    const masterFilteredRecords = filterRecordsByMasterList(periodRecords);
-    const tingkatanRecords = state.selectedTingkatan === "__all__"
-      ? masterFilteredRecords
-      : masterFilteredRecords.filter((row) => classToTingkatan(row.kelas) === state.selectedTingkatan);
+    const yearlyMasterFiltered = filterRecordsByMasterList(yearlyRecords);
+    const yearlyTingkatanRecords = state.selectedTingkatan === "__all__"
+      ? yearlyMasterFiltered
+      : yearlyMasterFiltered.filter((row) => classToTingkatan(row.kelas) === state.selectedTingkatan);
 
-    renderSummaryTable(tingkatanRecords, isAllClasses, state.selectedClass);
+    const periodRecords = isYearMode
+      ? yearlyTingkatanRecords
+      : yearlyTingkatanRecords.filter((row) => row.bulan === state.selectedMonth);
+
+    renderSummaryTable(periodRecords, isAllClasses, state.selectedClass, yearlyTingkatanRecords);
 
     const filtered = isAllClasses
-      ? tingkatanRecords
-      : tingkatanRecords.filter((row) => row.kelas === state.selectedClass);
+      ? periodRecords
+      : periodRecords.filter((row) => row.kelas === state.selectedClass);
 
     if (!filtered.length) {
       el.status.textContent = `Tiada rekod untuk ${state.selectedYear} ${periodText} ${tingkatanText} ${classText}.`;
@@ -210,7 +208,7 @@
     el.status.textContent = `${filtered.length} rekod dianalisis untuk ${state.selectedYear} ${periodText} ${tingkatanText} ${classText}.`;
     renderPie(filtered);
     renderLanguageBars(filtered);
-    renderTingkatanBars(tingkatanRecords);
+    renderTingkatanBars(periodRecords);
     renderBar(filtered);
     renderClassHeatmap(filtered);
   }
@@ -233,7 +231,7 @@
     }
   }
 
-  function renderSummaryTable(periodRecords, isAllClasses, selectedClass) {
+  function renderSummaryTable(periodRecords, isAllClasses, selectedClass, yearlyRecords) {
     if (!el.summaryTbody || !el.summaryHeadRow) {
       return;
     }
@@ -244,17 +242,17 @@
     }
 
     if (isAllClasses) {
-      renderSummaryAllClasses(periodRecords);
+      renderSummaryAllClasses(periodRecords, yearlyRecords);
       return;
     }
 
-    renderSummaryOneClass(periodRecords, selectedClass);
+    renderSummaryOneClass(periodRecords, selectedClass, yearlyRecords);
   }
 
   function renderEmptySummary(isAllClasses) {
     setSummaryHeaders(isAllClasses);
     if (el.summaryTbody) {
-      el.summaryTbody.innerHTML = '<tr><td colspan="10" class="empty">Tiada data ringkasan.</td></tr>';
+      el.summaryTbody.innerHTML = '<tr><td colspan="11" class="empty">Tiada data ringkasan.</td></tr>';
     }
   }
 
@@ -273,6 +271,7 @@
         <th>Bahasa Melayu</th>
         <th>Bahasa Inggeris</th>
         <th>Lain-lain Bahasa</th>
+        <th>AINS (Sepanjang Tahun)</th>
         <th>JUMLAH BACAAN</th>
       `;
       return;
@@ -288,14 +287,24 @@
       <th>Bahasa Melayu</th>
       <th>Bahasa Inggeris</th>
       <th>Lain-lain Bahasa</th>
+      <th>AINS (Sepanjang Tahun)</th>
       <th>JUMLAH BACAAN</th>
     `;
   }
 
-  function renderSummaryAllClasses(periodRecords) {
+  function renderSummaryAllClasses(periodRecords, yearlyRecords) {
     setSummaryHeaders(true);
 
     const byClass = new Map();
+    const yearAinsByClass = new Map();
+    (Array.isArray(yearlyRecords) ? yearlyRecords : []).forEach((row) => {
+      const kelas = String(row.kelas || "").trim();
+      if (!kelas) {
+        return;
+      }
+      yearAinsByClass.set(kelas, (yearAinsByClass.get(kelas) || 0) + Number(row.ains || 0));
+    });
+
     periodRecords.forEach((row) => {
       const kelas = String(row.kelas || "").trim();
       if (!kelas) {
@@ -311,6 +320,7 @@
           bahasa_melayu: 0,
           bahasa_inggeris: 0,
           lain_lain_bahasa: 0,
+          ains_sepanjang_tahun: 0,
           jumlah_bacaan: 0,
         });
       }
@@ -323,7 +333,7 @@
       slot.bahasa_melayu += Number(row.bahasa_melayu || 0);
       slot.bahasa_inggeris += Number(row.bahasa_inggeris || 0);
       slot.lain_lain_bahasa += Number(row.lain_lain_bahasa || 0);
-      slot.jumlah_bacaan += Number(row.jumlah_aktiviti || 0);
+      slot.jumlah_bacaan += computeJumlahBacaan(row);
     });
 
     const rows = [...byClass.values()].sort((a, b) => a.kelas.localeCompare(b.kelas, "ms"));
@@ -335,9 +345,11 @@
       bahasa_melayu: 0,
       bahasa_inggeris: 0,
       lain_lain_bahasa: 0,
+      ains_sepanjang_tahun: 0,
       jumlah_bacaan: 0,
     };
     rows.forEach((row) => {
+      row.ains_sepanjang_tahun = yearAinsByClass.get(row.kelas) || 0;
       total.bahan_digital += row.bahan_digital;
       total.bahan_bukan_buku += row.bahan_bukan_buku;
       total.fiksyen += row.fiksyen;
@@ -345,6 +357,7 @@
       total.bahasa_melayu += row.bahasa_melayu;
       total.bahasa_inggeris += row.bahasa_inggeris;
       total.lain_lain_bahasa += row.lain_lain_bahasa;
+      total.ains_sepanjang_tahun += row.ains_sepanjang_tahun;
       total.jumlah_bacaan += row.jumlah_bacaan;
     });
 
@@ -362,6 +375,7 @@
         <td>${row.bahasa_melayu}</td>
         <td>${row.bahasa_inggeris}</td>
         <td>${row.lain_lain_bahasa}</td>
+        <td>${row.ains_sepanjang_tahun}</td>
         <td>${row.jumlah_bacaan}</td>
       </tr>`
       )
@@ -377,11 +391,12 @@
         <td><strong>${total.bahasa_melayu}</strong></td>
         <td><strong>${total.bahasa_inggeris}</strong></td>
         <td><strong>${total.lain_lain_bahasa}</strong></td>
+        <td><strong>${total.ains_sepanjang_tahun}</strong></td>
         <td><strong>${total.jumlah_bacaan}</strong></td>
       </tr>`;
   }
 
-  function renderSummaryOneClass(periodRecords, selectedClass) {
+  function renderSummaryOneClass(periodRecords, selectedClass, yearlyRecords) {
     setSummaryHeaders(false);
 
     const byStudent = new Map();
@@ -408,6 +423,7 @@
             bahasa_melayu: 0,
             bahasa_inggeris: 0,
             lain_lain_bahasa: 0,
+            ains_sepanjang_tahun: 0,
             jumlah_bacaan: 0,
           });
           if (!byName.has(nama.toLowerCase())) {
@@ -438,6 +454,7 @@
             bahasa_melayu: 0,
             bahasa_inggeris: 0,
             lain_lain_bahasa: 0,
+            ains_sepanjang_tahun: 0,
             jumlah_bacaan: 0,
           });
           if (nama && !byName.has(nama.toLowerCase())) {
@@ -453,12 +470,29 @@
         slot.bahasa_melayu += Number(row.bahasa_melayu || 0);
         slot.bahasa_inggeris += Number(row.bahasa_inggeris || 0);
         slot.lain_lain_bahasa += Number(row.lain_lain_bahasa || 0);
-        slot.jumlah_bacaan += Number(row.jumlah_aktiviti || 0);
+        slot.jumlah_bacaan += computeJumlahBacaan(row);
+      });
+
+    (Array.isArray(yearlyRecords) ? yearlyRecords : [])
+      .filter((row) => row.kelas === selectedClass)
+      .forEach((row) => {
+        const noKad = String(row.no_kad_pengenalan || "").trim();
+        const nama = String(row.nama || "").trim();
+        const existingKey =
+          (noKad && byStudent.has(noKad) && noKad) ||
+          (nama && byName.get(nama.toLowerCase())) ||
+          "";
+        const key = existingKey || noKad || `nm:${nama.toLowerCase()}`;
+        const slot = byStudent.get(key);
+        if (!slot) {
+          return;
+        }
+        slot.ains_sepanjang_tahun += Number(row.ains || 0);
       });
 
     const rows = [...byStudent.values()].sort((a, b) => a.nama.localeCompare(b.nama, "ms"));
     if (!rows.length) {
-      el.summaryTbody.innerHTML = '<tr><td colspan="10" class="empty">Tiada data ringkasan.</td></tr>';
+      el.summaryTbody.innerHTML = '<tr><td colspan="11" class="empty">Tiada data ringkasan.</td></tr>';
       return;
     }
 
@@ -470,6 +504,7 @@
       bahasa_melayu: 0,
       bahasa_inggeris: 0,
       lain_lain_bahasa: 0,
+      ains_sepanjang_tahun: 0,
       jumlah_bacaan: 0,
     };
     rows.forEach((row) => {
@@ -480,6 +515,7 @@
       total.bahasa_melayu += row.bahasa_melayu;
       total.bahasa_inggeris += row.bahasa_inggeris;
       total.lain_lain_bahasa += row.lain_lain_bahasa;
+      total.ains_sepanjang_tahun += row.ains_sepanjang_tahun;
       total.jumlah_bacaan += row.jumlah_bacaan;
     });
 
@@ -497,6 +533,7 @@
         <td>${row.bahasa_melayu}</td>
         <td>${row.bahasa_inggeris}</td>
         <td>${row.lain_lain_bahasa}</td>
+        <td>${row.ains_sepanjang_tahun}</td>
         <td>${row.jumlah_bacaan}</td>
       </tr>`
       )
@@ -512,8 +549,19 @@
         <td><strong>${total.bahasa_melayu}</strong></td>
         <td><strong>${total.bahasa_inggeris}</strong></td>
         <td><strong>${total.lain_lain_bahasa}</strong></td>
+        <td><strong>${total.ains_sepanjang_tahun}</strong></td>
         <td><strong>${total.jumlah_bacaan}</strong></td>
       </tr>`;
+  }
+
+  function computeJumlahBacaan(row) {
+    return (
+      Number(row.bahan_digital || 0) +
+      Number(row.bahan_bukan_buku || 0) +
+      Number(row.fiksyen || 0) +
+      Number(row.bukan_fiksyen || 0) +
+      Number(row.ains || 0)
+    );
   }
 
   function renderPie(records) {
