@@ -260,6 +260,9 @@ button:hover {
   margin: 0.5rem 0 0.75rem;
   color: #244751;
   font-weight: 600;
+  font-size: 0.82rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .jumlah-toggle label {
