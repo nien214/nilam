@@ -77,6 +77,7 @@
     initGuruDropdown();
     initTeacherDropdown();
     initDateField();
+    fitEntryControls();
     bindEvents();
 
     // Phase 1 — show local data instantly (no network wait).
@@ -142,9 +143,11 @@
     if (el.namaPengisi) {
       el.namaPengisi.addEventListener("input", () => {
         state.selectedTeacherName = String(el.namaPengisi.value || "").trim();
+        fitTextInputWidth(el.namaPengisi, 10, 20);
       });
       el.namaPengisi.addEventListener("change", async () => {
         state.selectedTeacherName = String(el.namaPengisi.value || "").trim();
+        fitTextInputWidth(el.namaPengisi, 10, 20);
         if (state.selectedTeacherName) {
           rememberTeacherName(state.selectedTeacherName);
         }
@@ -158,6 +161,7 @@
       el.guruJenis.addEventListener("change", async () => {
         const chosen = String(el.guruJenis.value || "Nilam").trim();
         state.selectedGuruType = GURU_TYPES.includes(chosen) ? chosen : "Nilam";
+        fitSelectWidth(el.guruJenis, 7, 12);
         applyGuruModeToVisibleRows();
         if (state.selectedClass) {
           await renderTableAndPrefill();
@@ -171,6 +175,7 @@
         if (!normalized) {
           return;
         }
+        fitTextInputWidth(el.tarikh, 10, 12);
         state.selectedDate = normalized;
         const pickedDate = new Date(`${normalized}T00:00:00`);
         state.selectedYear = String(pickedDate.getFullYear());
@@ -186,6 +191,7 @@
 
     el.kelas.addEventListener("change", async () => {
       state.selectedClass = el.kelas.value;
+      fitSelectWidth(el.kelas, 9, 16);
       await renderTableAndPrefill();
     });
 
@@ -216,6 +222,7 @@
       el.guruJenis.appendChild(option);
     });
     el.guruJenis.value = state.selectedGuruType;
+    fitSelectWidth(el.guruJenis, 7, 12);
   }
 
   function initTeacherDropdown() {
@@ -225,6 +232,7 @@
     state.teacherNames = loadTeacherNames();
     renderTeacherSuggestions();
     el.namaPengisi.value = state.selectedTeacherName;
+    fitTextInputWidth(el.namaPengisi, 10, 20);
   }
 
   function initDateField() {
@@ -235,9 +243,11 @@
     state.selectedMonth = MONTHS[today.getMonth()];
     if (el.tarikh) {
       el.tarikh.value = isoDate;
+      fitTextInputWidth(el.tarikh, 10, 12);
     }
     if (el.tahun) {
       el.tahun.value = state.selectedYear;
+      fitTextInputWidth(el.tahun, 6, 8);
     }
   }
 
@@ -249,11 +259,44 @@
       option.textContent = className;
       el.kelas.appendChild(option);
     });
+    fitSelectWidth(el.kelas, 9, 16);
   }
 
   function resetClassDropdown() {
     el.kelas.innerHTML = '<option value="">Pilih kelas</option>';
     state.selectedClass = "";
+    fitSelectWidth(el.kelas, 9, 16);
+  }
+
+  function fitEntryControls() {
+    fitTextInputWidth(el.namaPengisi, 10, 20);
+    fitSelectWidth(el.guruJenis, 7, 12);
+    fitTextInputWidth(el.tarikh, 10, 12);
+    fitTextInputWidth(el.tahun, 6, 8);
+    fitSelectWidth(el.kelas, 9, 16);
+  }
+
+  function fitTextInputWidth(inputEl, minCh, maxCh) {
+    if (!inputEl) {
+      return;
+    }
+    const raw = String(inputEl.value || "").trim();
+    const length = raw.length ? raw.length + 2 : minCh;
+    const clamped = Math.max(minCh, Math.min(maxCh, length));
+    inputEl.style.width = `${clamped}ch`;
+  }
+
+  function fitSelectWidth(selectEl, minCh, maxCh) {
+    if (!selectEl) {
+      return;
+    }
+    const option = selectEl.options && selectEl.selectedIndex >= 0
+      ? selectEl.options[selectEl.selectedIndex]
+      : null;
+    const text = String((option && option.textContent) || selectEl.value || "").trim();
+    const length = text.length ? text.length + 3 : minCh;
+    const clamped = Math.max(minCh, Math.min(maxCh, length));
+    selectEl.style.width = `${clamped}ch`;
   }
 
   function hydrateStudents(students) {

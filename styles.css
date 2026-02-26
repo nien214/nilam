@@ -193,35 +193,33 @@ label {
 #entryControls > input[type="number"],
 #entryControls > input[type="text"],
 #entryControls > input[type="date"] {
-  width: auto;
+  width: fit-content;
   flex: 0 0 auto;
   font-size: 0.76rem;
   line-height: 1.15;
+  max-width: 100%;
 }
 
 #entryControls #namaPengisi {
-  width: 16ch;
-  min-width: 16ch;
+  min-width: 10ch;
+  max-width: 20ch;
 }
 
 #entryControls #guruJenis {
-  width: 8.5ch;
-  min-width: 8.5ch;
-}
-
-#entryControls #tarikh {
-  width: 10.5ch;
-  min-width: 10.5ch;
-}
-
-#entryControls #tahun {
-  width: 7ch;
   min-width: 7ch;
 }
 
+#entryControls #tarikh {
+  min-width: 10ch;
+}
+
+#entryControls #tahun {
+  min-width: 6ch;
+}
+
 #entryControls #kelas {
-  width: 10.5ch;
-  min-width: 10.5ch;
+  min-width: 9ch;
+  max-width: 16ch;
 }
 
 #entryControls input[type="date"]::-webkit-datetime-edit,
