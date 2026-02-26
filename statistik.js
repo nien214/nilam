@@ -317,12 +317,30 @@
 
     const byClass = new Map();
     const yearAinsByClass = new Map();
+    const maxAinsByStudent = new Map();
     (Array.isArray(yearlyRecords) ? yearlyRecords : []).forEach((row) => {
       const kelas = String(row.kelas || "").trim();
       if (!kelas) {
         return;
       }
-      yearAinsByClass.set(kelas, (yearAinsByClass.get(kelas) || 0) + Number(row.ains || 0));
+      const noKad = normalizeKeyText(row.no_kad_pengenalan);
+      const nama = normalizeKeyText(row.nama);
+      const studentKey = noKad ? `ic:${noKad}` : nama ? `nm:${nama}|k:${kelas.toLowerCase()}` : "";
+      if (!studentKey) {
+        return;
+      }
+      const current = maxAinsByStudent.get(studentKey);
+      const nextAins = Math.max(0, Math.trunc(Number(row.ains || 0)));
+      if (!current || nextAins > current.ains) {
+        maxAinsByStudent.set(studentKey, { kelas, ains: nextAins });
+      }
+    });
+    maxAinsByStudent.forEach((entry) => {
+      const kelas = String(entry.kelas || "").trim();
+      if (!kelas) {
+        return;
+      }
+      yearAinsByClass.set(kelas, (yearAinsByClass.get(kelas) || 0) + Number(entry.ains || 0));
     });
 
     periodRecords.forEach((row) => {
@@ -509,7 +527,10 @@
         if (!slot) {
           return;
         }
-        slot.ains_sepanjang_tahun += Number(row.ains || 0);
+        slot.ains_sepanjang_tahun = Math.max(
+          slot.ains_sepanjang_tahun,
+          Math.max(0, Math.trunc(Number(row.ains || 0)))
+        );
       });
 
     const rows = [...byStudent.values()].sort((a, b) => a.nama.localeCompare(b.nama, "ms"));

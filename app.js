@@ -464,27 +464,71 @@
   }
 
   function computeTotalsMap(records, includeAins) {
-    const map = new Map();
-    records.forEach((r) => {
+    const materialsByStudent = new Map();
+    (Array.isArray(records) ? records : []).forEach((r) => {
       const noKad = String(r.no_kad_pengenalan || "").trim();
       if (!noKad) {
         return;
       }
-      map.set(noKad, (map.get(noKad) || 0) + computeJumlahBacaanFromRecord(r, includeAins));
+      const materials = computeJumlahBacaanFromRecord(r, false);
+      materialsByStudent.set(noKad, (materialsByStudent.get(noKad) || 0) + materials);
     });
-    return map;
+
+    if (!includeAins) {
+      return materialsByStudent;
+    }
+
+    const ainsAnnualByStudent = computeAnnualAinsTotalsMap(records);
+    const merged = new Map(materialsByStudent);
+    ainsAnnualByStudent.forEach((ains, noKad) => {
+      merged.set(noKad, (merged.get(noKad) || 0) + ains);
+    });
+    return merged;
   }
 
   function computeAinsTotalsMap(records) {
     const map = new Map();
-    records.forEach((r) => {
+    (Array.isArray(records) ? records : []).forEach((r) => {
       const noKad = String(r.no_kad_pengenalan || "").trim();
       if (!noKad) {
         return;
       }
-      map.set(noKad, (map.get(noKad) || 0) + computeAinsTotalFromRecord(r));
+      const current = map.get(noKad) || 0;
+      const next = computeAinsTotalFromRecord(r);
+      if (next > current) {
+        map.set(noKad, next);
+      } else if (!map.has(noKad)) {
+        map.set(noKad, current);
+      }
     });
     return map;
+  }
+
+  function computeAnnualAinsTotalsMap(records) {
+    const maxByStudentYear = new Map();
+    (Array.isArray(records) ? records : []).forEach((r) => {
+      const noKad = String(r.no_kad_pengenalan || "").trim();
+      const tahun = String(r.tahun || "").trim();
+      if (!noKad) {
+        return;
+      }
+      const key = `${noKad}|${tahun}`;
+      const next = computeAinsTotalFromRecord(r);
+      const current = maxByStudentYear.get(key) || 0;
+      if (next > current) {
+        maxByStudentYear.set(key, next);
+      } else if (!maxByStudentYear.has(key)) {
+        maxByStudentYear.set(key, current);
+      }
+    });
+
+    const sumByStudent = new Map();
+    maxByStudentYear.forEach((ains, key) => {
+      const sepIndex = key.indexOf("|");
+      const noKad = sepIndex >= 0 ? key.slice(0, sepIndex) : key;
+      sumByStudent.set(noKad, (sumByStudent.get(noKad) || 0) + ains);
+    });
+    return sumByStudent;
   }
 
   function recalculateVisibleJumlahAktiviti() {
@@ -1016,7 +1060,7 @@
     return all;
   }
 
-  function computeJumlahBacaanFromRecord(row, includeAins) {
+  function computeJumlahBacaanFromRecord(row, includeAins = false) {
     const totalWithoutAins = (
       clampNilamNumber(row?.bahan_digital) +
       clampNilamNumber(row?.bahan_bukan_buku) +
