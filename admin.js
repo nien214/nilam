@@ -962,7 +962,7 @@
       const parsed = parseImportedAinsRows(rows, year, month);
       if (!parsed.records.length) {
         throw new Error(
-          "Tiada padanan data AINS ditemui. Pastikan Nama dan ID DELIMa sama dengan namelist."
+          "Tiada padanan data AINS ditemui. Pastikan Nama Murid sama dengan namelist."
         );
       }
 
@@ -1001,7 +1001,7 @@
           )
           .join("");
         const html =
-          `${escapeAttr(baseMessage)} ${parsed.unmatchedCount} baris tidak dipadankan (Nama + ID DELIMa).${escapeAttr(syncNote)}` +
+          `${escapeAttr(baseMessage)} ${parsed.unmatchedCount} baris tidak dipadankan (Nama Murid).${escapeAttr(syncNote)}` +
           `<details class="ains-unmatched-block" open>` +
           `<summary>Lihat senarai baris tidak dipadankan</summary>` +
           `<ul class="compare-list ains-unmatched-list">${unmatchedList}</ul>` +
@@ -1258,17 +1258,17 @@
     ]);
     const ainsColumn = resolveColumnName(rows, ["rekod"]);
 
-    if (!namaColumn || !emailColumn || !ainsColumn) {
+    if (!namaColumn || !ainsColumn) {
       const availableHeaders = rows.length ? Object.keys(rows[0]).join(", ") : "(tiada header)";
       throw new Error(
-        `Kolum fail AINS tidak lengkap. Perlu ada: NAMA MURID, ID DELIMa/Email Google Classroom, dan kolum Rekod. Header dikesan: ${availableHeaders}`
+        `Kolum fail AINS tidak lengkap. Perlu ada: NAMA MURID dan kolum Rekod. Header dikesan: ${availableHeaders}`
       );
     }
 
     const namelist = getCurrentNamelist().map(normalizeStudentRow);
     const studentByMatchKey = new Map();
     namelist.forEach((student) => {
-      const matchKey = toStudentMatchKey(student.nama, student.email_google_classroom);
+      const matchKey = toStudentMatchKey(student.nama);
       if (!matchKey) {
         return;
       }
@@ -1283,8 +1283,8 @@
     const unmatchedRows = [];
     rows.forEach((row, index) => {
       const namaCsv = String(row[namaColumn] || "").trim();
-      const emailCsv = String(row[emailColumn] || "").trim();
-      const matchKey = toStudentMatchKey(namaCsv, emailCsv);
+      const emailCsv = String(emailColumn ? row[emailColumn] : "").trim();
+      const matchKey = toStudentMatchKey(namaCsv);
       if (!matchKey) {
         return;
       }
@@ -1346,17 +1346,15 @@
     return [...map.values()];
   }
 
-  function toStudentMatchKey(nama, emailDelima) {
-    const namaNorm = String(nama || "").trim().toLowerCase();
-    const emailNorm = normalizeDelimaId(emailDelima);
-    if (!namaNorm || !emailNorm) {
+  function toStudentMatchKey(nama) {
+    const namaNorm = String(nama || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+    if (!namaNorm) {
       return "";
     }
-    return `${namaNorm}|${emailNorm}`;
-  }
-
-  function normalizeDelimaId(value) {
-    return String(value || "").trim().toLowerCase();
+    return namaNorm;
   }
 
   function buildRecordWithAinsOverride(ainsImportRow, existingByKey) {
