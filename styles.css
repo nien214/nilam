@@ -256,15 +256,22 @@ input[type="date"] {
 }
 
 #namaPengisi {
-  color: var(--ink);
+  color: #17252a;
   background-color: #fff;
-  -webkit-text-fill-color: var(--ink);
+  -webkit-text-fill-color: #17252a;
   color-scheme: light;
+  caret-color: #17252a;
 }
 
 #namaPengisi::placeholder {
   color: #7a8a91;
   opacity: 1;
+}
+
+#namaGuruCadangan,
+#namaGuruCadangan option {
+  color: #17252a !important;
+  background-color: #ffffff !important;
 }
 
 .controls label {

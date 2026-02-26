@@ -29,6 +29,7 @@
   const NAMELIST_OVERRIDE_KEY = "nilam_students_override_v1";
   const TEACHER_NAMES_KEY = "nilam_teacher_names_v1";
   const GURU_TYPES = ["Nilam", "BM", "BI"];
+  const SYSTEM_TEACHER_NAMES = new Set(["ADMIN_IMPORT", "ADMIN_OVERRIDE", "TIDAK DIKETAHUI"]);
 
   const state = {
     rawStudents: [],
@@ -252,6 +253,7 @@
       return;
     }
     state.teacherNames = loadTeacherNames();
+    saveTeacherNames();
     renderTeacherSuggestions(state.selectedTeacherName);
     el.namaPengisi.value = state.selectedTeacherName;
     fitTeacherNameInputWidth();
@@ -1694,17 +1696,18 @@
     const merged = new Set();
     [...configNames, ...localNames].forEach((value) => {
       const clean = String(value || "").trim();
-      if (clean) {
-        merged.add(clean);
+      if (!clean || isSystemTeacherName(clean)) {
+        return;
       }
+      merged.add(clean);
     });
     loadAllLocalRecords().forEach((row) => {
       const clean = String(row?.nama_pengisi || "").trim();
-      if (clean && clean !== "Tidak Diketahui") {
+      if (clean && !isSystemTeacherName(clean)) {
         merged.add(clean);
       }
     });
-    return [...merged].sort((a, b) => a.localeCompare(b, "ms"));
+    return sanitizeTeacherNames([...merged]);
   }
 
   async function fetchTeacherNamesFromSupabase(config) {
@@ -1735,7 +1738,7 @@
     }
     return rows
       .map((row) => String(row?.nama_guru || "").trim())
-      .filter(Boolean);
+      .filter((name) => name && !isSystemTeacherName(name));
   }
 
   async function refreshTeacherNamesFromSupabase() {
@@ -1747,10 +1750,7 @@
     if (!cloudNames.length) {
       return;
     }
-    const merged = [...new Set([...state.teacherNames, ...cloudNames])]
-      .map((name) => String(name || "").trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b, "ms"));
+    const merged = sanitizeTeacherNames([...state.teacherNames, ...cloudNames]);
     if (merged.length === state.teacherNames.length && merged.every((name, idx) => name === state.teacherNames[idx])) {
       return;
     }
@@ -1761,6 +1761,7 @@
   }
 
   function saveTeacherNames() {
+    state.teacherNames = sanitizeTeacherNames(state.teacherNames);
     localStorage.setItem(TEACHER_NAMES_KEY, JSON.stringify(state.teacherNames));
   }
 
@@ -1769,9 +1770,10 @@
       return;
     }
     const query = String(filterText || "").trim().toLowerCase();
+    const safeNames = sanitizeTeacherNames(state.teacherNames);
     const names = query
-      ? state.teacherNames.filter((name) => String(name || "").toLowerCase().includes(query))
-      : state.teacherNames;
+      ? safeNames.filter((name) => String(name || "").toLowerCase().includes(query))
+      : safeNames;
     el.namaGuruCadangan.innerHTML = "";
     names.forEach((name) => {
       const option = document.createElement("option");
@@ -1782,7 +1784,7 @@
 
   function rememberTeacherName(value) {
     const clean = String(value || "").trim();
-    if (!clean) {
+    if (!clean || isSystemTeacherName(clean)) {
       return;
     }
     if (!state.teacherNames.includes(clean)) {
@@ -1792,6 +1794,29 @@
       renderTeacherSuggestions(state.selectedTeacherName);
     }
     fitTeacherNameInputWidth();
+  }
+
+  function isSystemTeacherName(value) {
+    const clean = String(value || "").trim().toUpperCase();
+    return SYSTEM_TEACHER_NAMES.has(clean);
+  }
+
+  function sanitizeTeacherNames(names) {
+    const seen = new Set();
+    const cleaned = [];
+    (Array.isArray(names) ? names : []).forEach((value) => {
+      const clean = String(value || "").trim();
+      if (!clean || isSystemTeacherName(clean)) {
+        return;
+      }
+      const key = clean.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      cleaned.push(clean);
+    });
+    return cleaned.sort((a, b) => a.localeCompare(b, "ms"));
   }
 
   function applyGuruModeToVisibleRows() {
