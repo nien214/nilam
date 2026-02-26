@@ -1662,11 +1662,8 @@
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const endpoint =
       `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,tarikh,no_kad_pengenalan,nama_pengisi,guru`;
+    const payload = dedupeRecordsForSupabase(records);
     try {
-      const payload = (Array.isArray(records) ? records : []).map((row) => ({
-        ...row,
-        bil: toPositiveInt(row?.bil, 1),
-      }));
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -1684,24 +1681,29 @@
 
       const detail = await response.text();
       const isNoConflictConstraint = response.status === 400 && String(detail || "").includes("42P10");
-      if (!isNoConflictConstraint) {
+      const isUpsertDuplicateBatch =
+        response.status === 500 &&
+        (String(detail || "").includes("21000") ||
+          String(detail || "").toLowerCase().includes("cannot affect row a second time"));
+      if (isNoConflictConstraint || isUpsertDuplicateBatch) {
+        await replaceMonthlyAdminImportRecordsInSupabase(payload, config);
+        return;
+      }
+      if (!isNoConflictConstraint && !isUpsertDuplicateBatch) {
         throw new Error(`Sync import data ke Supabase gagal (${response.status}): ${detail}`);
       }
     } catch (error) {
       const message = String(error && error.message ? error.message : error || "");
-      if (!message.includes("42P10")) {
+      if (!message.includes("42P10") && !message.includes("21000")) {
         throw error;
       }
+      await replaceMonthlyAdminImportRecordsInSupabase(payload, config);
+      return;
     }
-
-    await replaceMonthlyAdminImportRecordsInSupabase(records, config);
   }
 
   async function replaceMonthlyAdminImportRecordsInSupabase(records, config) {
-    const safeRecords = (Array.isArray(records) ? records.filter(Boolean) : []).map((row) => ({
-      ...row,
-      bil: toPositiveInt(row?.bil, 1),
-    }));
+    const safeRecords = dedupeRecordsForSupabase(records);
     if (!safeRecords.length) {
       return;
     }
@@ -1918,6 +1920,31 @@
       });
     }
     return list;
+  }
+
+  function dedupeRecordsForSupabase(records) {
+    const byKey = new Map();
+    (Array.isArray(records) ? records : []).forEach((row, index) => {
+      const key = recordSessionKey(row);
+      if (!key) {
+        return;
+      }
+      const nextRow = {
+        ...row,
+        bil: toPositiveInt(row?.bil, 1),
+      };
+      const nextTs = parseTimestamp(nextRow.updated_at_client);
+      const current = byKey.get(key);
+      if (!current || nextTs > current.ts || (nextTs === current.ts && index >= current.index)) {
+        byKey.set(key, { row: nextRow, ts: nextTs, index });
+      }
+    });
+    return [...byKey.values()].map((entry) => entry.row);
+  }
+
+  function parseTimestamp(value) {
+    const ms = Date.parse(String(value || ""));
+    return Number.isFinite(ms) ? ms : 0;
   }
 
   // Generates a deterministic synthetic IC for students without one.
