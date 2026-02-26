@@ -170,6 +170,9 @@
         state.selectedGuruType = GURU_TYPES.includes(chosen) ? chosen : "Nilam";
         fitSelectWidth(el.guruJenis, 12, 14);
         applyGuruModeToVisibleRows();
+        if (state.selectedGuruType === "BM" || state.selectedGuruType === "BI") {
+          window.alert("Peringatan mesra: Sila isi bahagian Bahan Bacaan sahaja.");
+        }
         if (state.selectedClass) {
           await renderTableAndPrefill();
         }
@@ -1743,6 +1746,7 @@
         const input = row.querySelector(`input[data-col="${colName}"]`);
         if (input) {
           input.readOnly = isAutoGuru;
+          input.disabled = isAutoGuru;
         }
       });
       updateJumlahAktiviti(row);

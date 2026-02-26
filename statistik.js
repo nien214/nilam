@@ -254,11 +254,6 @@
       return;
     }
 
-    if (!periodRecords.length) {
-      renderEmptySummary(isAllClasses);
-      return;
-    }
-
     if (isAllClasses) {
       renderSummaryAllClasses(periodRecords, yearlyRecords);
       return;
@@ -316,6 +311,25 @@
     setSummaryHeaders(true);
 
     const byClass = new Map();
+    const summaryClasses = Array.isArray(state.classes) ? state.classes : [];
+    summaryClasses.forEach((kelas) => {
+      const cleanKelas = String(kelas || "").trim();
+      if (!cleanKelas || byClass.has(cleanKelas)) {
+        return;
+      }
+      byClass.set(cleanKelas, {
+        kelas: cleanKelas,
+        bahan_digital: 0,
+        bahan_bukan_buku: 0,
+        fiksyen: 0,
+        bukan_fiksyen: 0,
+        bahasa_melayu: 0,
+        bahasa_inggeris: 0,
+        lain_lain_bahasa: 0,
+        ains_sepanjang_tahun: 0,
+        jumlah_bacaan: 0,
+      });
+    });
     const yearAinsByClass = new Map();
     const maxAinsByStudent = new Map();
     (Array.isArray(yearlyRecords) ? yearlyRecords : []).forEach((row) => {
@@ -375,6 +389,10 @@
     });
 
     const rows = [...byClass.values()].sort((a, b) => a.kelas.localeCompare(b.kelas, "ms"));
+    if (!rows.length) {
+      renderEmptySummary(true);
+      return;
+    }
     const total = {
       bahan_digital: 0,
       bahan_bukan_buku: 0,

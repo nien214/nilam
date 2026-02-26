@@ -1517,6 +1517,7 @@
     const bi = toInt999(row.bahasa_inggeris);
     const lain = toInt999(row.lain_lain_bahasa);
     return {
+      id: Number.isFinite(Number(row.id)) && Number(row.id) > 0 ? Number(row.id) : undefined,
       tahun,
       bulan,
       tarikh,
@@ -1676,6 +1677,41 @@
     }
   }
 
+  async function upsertImportedRecordsToSupabaseById(records) {
+    const config = window.NILAM_CONFIG || {};
+    if (!config.supabaseUrl || !config.supabaseAnonKey || !records.length) {
+      return;
+    }
+
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=id`;
+    const payload = records.map((row) => {
+      const out = { ...row };
+      if (!Number.isFinite(Number(out.id)) || Number(out.id) <= 0) {
+        delete out.id;
+      } else {
+        out.id = Number(out.id);
+      }
+      return out;
+    });
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Sync overwrite AINS ke Supabase gagal (${response.status}): ${detail}`);
+    }
+  }
+
   async function overwriteAinsInSupabase(year, month, importedAinsRows, ainsOverrideRecords) {
     const config = window.NILAM_CONFIG || {};
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
@@ -1703,11 +1739,16 @@
     (Array.isArray(ainsOverrideRecords) ? ainsOverrideRecords : []).forEach((row) => {
       const key = recordSessionKey(row);
       if (key) {
-        byKey.set(key, row);
+        const existingRow = byKey.get(key);
+        if (existingRow && Number.isFinite(Number(existingRow.id)) && !Number.isFinite(Number(row.id))) {
+          byKey.set(key, { ...row, id: Number(existingRow.id) });
+        } else {
+          byKey.set(key, row);
+        }
       }
     });
 
-    await upsertImportedRecordsToSupabase([...byKey.values()]);
+    await upsertImportedRecordsToSupabaseById([...byKey.values()]);
   }
 
   async function fetchSupabaseRecordsByNoKadForPeriod(year, month, noKadList, config) {
@@ -1718,7 +1759,7 @@
       const chunk = noKadList.slice(i, i + chunkSize);
       const params = new URLSearchParams({
         select:
-          "tahun,bulan,tarikh,nama_pengisi,guru,bil,no_kad_pengenalan,nama,kelas,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
+          "id,tahun,bulan,tarikh,nama_pengisi,guru,bil,no_kad_pengenalan,nama,kelas,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
         tahun: `eq.${year}`,
         bulan: `eq.${month}`,
         no_kad_pengenalan: `in.(${chunk.join(",")})`,
