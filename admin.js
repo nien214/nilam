@@ -1821,32 +1821,55 @@
     }
 
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
-    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=id`;
-    const payload = records.map((row) => {
-      const out = { ...row };
-      out.bil = toPositiveInt(out?.bil, 1);
-      if (!Number.isFinite(Number(out.id)) || Number(out.id) <= 0) {
-        delete out.id;
+    const deduped = dedupeRecordsForSupabase(records);
+    const payloadWithId = [];
+    const payloadWithoutId = [];
+    deduped.forEach((row) => {
+      const clean = { ...row, bil: toPositiveInt(row?.bil, 1) };
+      const id = Number(clean.id);
+      if (Number.isFinite(id) && id > 0) {
+        clean.id = id;
+        payloadWithId.push(clean);
       } else {
-        out.id = Number(out.id);
+        delete clean.id;
+        payloadWithoutId.push(clean);
       }
-      return out;
     });
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: config.supabaseAnonKey,
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
-        Prefer: "resolution=merge-duplicates,return=minimal",
-      },
-      body: JSON.stringify(payload),
-    });
+    if (payloadWithId.length) {
+      const updateEndpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=id`;
+      const updateRes = await fetch(updateEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${config.supabaseAnonKey}`,
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(payloadWithId),
+      });
+      if (!updateRes.ok) {
+        const detail = await updateRes.text();
+        throw new Error(`Sync overwrite AINS (update) ke Supabase gagal (${updateRes.status}): ${detail}`);
+      }
+    }
 
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Sync overwrite AINS ke Supabase gagal (${response.status}): ${detail}`);
+    if (payloadWithoutId.length) {
+      const insertEndpoint = `${supabaseUrl}/rest/v1/nilam_records`;
+      const insertRes = await fetch(insertEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${config.supabaseAnonKey}`,
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(payloadWithoutId),
+      });
+      if (!insertRes.ok) {
+        const detail = await insertRes.text();
+        throw new Error(`Sync overwrite AINS (insert) ke Supabase gagal (${insertRes.status}): ${detail}`);
+      }
     }
   }
 
