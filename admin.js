@@ -500,9 +500,27 @@
     `;
   }
 
-  function loadStudentsForManage() {
-    const raw = getCurrentNamelist();
-    state.students = raw.map(normalizeStudentRow).filter((row) => row.nama || row.kelas);
+  async function loadStudentsForManage() {
+    const config = window.NILAM_CONFIG || {};
+    let raw = [];
+    let cloudError = "";
+
+    if (config.supabaseUrl && config.supabaseAnonKey) {
+      try {
+        raw = await fetchStudentsFromSupabase(config, String(new Date().getFullYear()));
+      } catch (error) {
+        console.error(error);
+        cloudError = String(error?.message || error || "").slice(0, 220);
+      }
+    } else if (CLOUD_ONLY_MODE) {
+      cloudError = "Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.";
+    }
+
+    if (!raw.length && !CLOUD_ONLY_MODE) {
+      raw = getCurrentNamelist();
+    }
+
+    state.students = (Array.isArray(raw) ? raw : []).map(normalizeStudentRow).filter((row) => row.nama || row.kelas);
     if (!state.students.length) {
       state.students = [emptyStudentRow()];
     }
@@ -514,6 +532,11 @@
     }
     updateUndoBtn();
     renderManageTable();
+    populateNilamUpdateClassOptions();
+
+    if (cloudError && CLOUD_ONLY_MODE) {
+      setStatus(`Gagal memuatkan senarai murid dari cloud: ${cloudError}`, true);
+    }
   }
 
   function renderManageTable() {
@@ -750,7 +773,7 @@
       await upsertStudentsToSupabase(toSave);
       const purgeResult = await syncRecordsToMasterList(toSave);
       setStatus(
-        `Senarai murid berjaya disimpan: ${toSave.length} murid. Data murid yang dibuang telah dipadam (Local: ${purgeResult.localDeleted}, Supabase: ${purgeResult.supabaseDeleted}).`
+        `Senarai murid berjaya disimpan: ${toSave.length} murid. Data murid yang dibuang telah dipadam di cloud: ${purgeResult.supabaseDeleted}.`
       );
       showPopupStatus("Berjaya disimpan", false);
     } catch (error) {
@@ -930,7 +953,7 @@
       await upsertStudentsToSupabase(namelist);
       const purgeResult = await syncRecordsToMasterList(namelist);
       setStatus(
-        `Namelist berjaya diimport: ${namelist.length} murid. Data murid yang dibuang telah dipadam (Local: ${purgeResult.localDeleted}, Supabase: ${purgeResult.supabaseDeleted}).`
+        `Namelist berjaya diimport: ${namelist.length} murid. Data murid yang dibuang telah dipadam di cloud: ${purgeResult.supabaseDeleted}.`
       );
       showPopupStatus("Berjaya disimpan", false);
     } catch (error) {
@@ -989,7 +1012,7 @@
         }
         console.error(syncError);
         const detail = String(syncError?.message || syncError || "").slice(0, 220);
-        syncNote = ` Simpanan Supabase gagal (${detail}), tetapi senarai telah disimpan ke local.`;
+        syncNote = ` Simpanan Supabase gagal (${detail}).`;
       }
 
       setStatus(
@@ -1119,7 +1142,7 @@
         }
         console.error(syncError);
         const detail = String(syncError?.message || syncError || "").slice(0, 220);
-        syncNote = ` Simpanan Supabase gagal (${detail}), tetapi data telah disimpan ke local.`;
+        syncNote = ` Simpanan Supabase gagal (${detail}).`;
       }
 
       setStatus(
@@ -1150,6 +1173,18 @@
       const month = state.pendingImportMonth;
       if (!year || !month) {
         throw new Error("Tahun/Bulan import AINS tiada. Sila klik butang Import Data AINS semula.");
+      }
+
+      if (!getCurrentNamelist().length) {
+        const config = window.NILAM_CONFIG || {};
+        if (!config.supabaseUrl || !config.supabaseAnonKey) {
+          throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+        }
+        state.students = await fetchStudentsFromSupabase(config, year);
+        if (state.isManageOpen) {
+          renderManageTable();
+        }
+        populateNilamUpdateClassOptions();
       }
 
       const rows = await readRowsFromFile(file);
@@ -1186,7 +1221,7 @@
         }
         console.error(syncError);
         const detail = String(syncError?.message || syncError || "").slice(0, 220);
-        syncNote = ` Simpanan Supabase gagal (${detail}), tetapi data AINS telah disimpan ke local.`;
+        syncNote = ` Simpanan Supabase gagal (${detail}).`;
       }
 
       const baseMessage = `Import Data AINS berjaya: ${parsed.records.length} rekod untuk ${year} ${month} telah di-override.`;
@@ -1256,7 +1291,7 @@
             throw error;
           }
           console.error(error);
-          cloudWarning = ` Muat cloud gagal (${String(error?.message || error || "").slice(0, 160)}), guna data local.`;
+          cloudWarning = ` Muat cloud gagal (${String(error?.message || error || "").slice(0, 160)}).`;
         }
       }
       const allRecords = mergeRecordsByLatestSession(supabaseRecords, localRecords);
@@ -1703,7 +1738,7 @@
           }
           console.error(syncError);
           const detail = String(syncError?.message || syncError || "").slice(0, 220);
-          syncNote = ` Simpanan Supabase gagal (${detail}), tetapi data telah disimpan ke local.`;
+          syncNote = ` Simpanan Supabase gagal (${detail}).`;
         }
       }
 
@@ -1844,7 +1879,7 @@
       }
     }
 
-    setStatus(`Reset selesai. LocalStorage dipadam: ${localDeletedCount} set data. ${supabaseMessage}`);
+    setStatus(`Reset selesai. Data cloud telah dipadam. ${supabaseMessage}`);
   }
 
   async function deleteAllSupabaseData(config) {
@@ -2827,6 +2862,66 @@
     return `NOIC_${kelas}_${nama}`;
   }
 
+  async function fetchStudentsFromSupabase(config, year) {
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      if (CLOUD_ONLY_MODE) {
+        throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+      }
+      return [];
+    }
+
+    const safeYear = /^\d{4}$/.test(String(year || "")) ? String(year) : String(new Date().getFullYear());
+    const kelasField = `kelas_${safeYear}`;
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const params = new URLSearchParams({
+      select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField},kelas_2026,kelas_2027,kelas_2028,kelas_2029,kelas_2030,kelas_2031`,
+      active: "neq.false",
+      order: "nama_murid.asc",
+      limit: "50000",
+    });
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_students?${params.toString()}`;
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Ralat muat senarai murid Supabase (${response.status}): ${detail}`);
+    }
+
+    const rows = await response.json();
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+
+    const fallbackClassFields = [
+      kelasField,
+      "kelas_2026",
+      "kelas_2027",
+      "kelas_2028",
+      "kelas_2029",
+      "kelas_2030",
+      "kelas_2031",
+    ];
+
+    return rows
+      .map((row) =>
+        normalizeStudentRow({
+          nama: row.nama_murid,
+          jantina: row.jantina,
+          kelas: fallbackClassFields.map((field) => row[field]).find((value) => String(value || "").trim()) || "",
+          no_kad_pengenalan: row.no_kad_pengenalan,
+          email_google_classroom: row.email_google_classroom,
+        })
+      )
+      .filter((row) => row.nama && row.kelas);
+  }
+
   async function upsertStudentsToSupabase(students, options = {}) {
     const deactivateMissing = options.deactivateMissing !== false;
     const config = window.NILAM_CONFIG || {};
@@ -3034,6 +3129,16 @@
   }
 
   function getCurrentNamelist() {
+    const memoryList = (Array.isArray(state.students) ? state.students : [])
+      .map(normalizeStudentRow)
+      .filter((row) => row.nama && row.kelas);
+    if (memoryList.length) {
+      return memoryList;
+    }
+    if (CLOUD_ONLY_MODE) {
+      return [];
+    }
+
     const overrideRaw = localGetItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
@@ -3515,7 +3620,7 @@
       await upsertStudentsToSupabase(finalList);
       const purgeResult = await syncRecordsToMasterList(finalList);
       setStatus(
-        `Senarai nama dikemas kini: ${finalList.length} murid. Data murid yang dibuang telah dipadam (Local: ${purgeResult.localDeleted}, Supabase: ${purgeResult.supabaseDeleted}).`
+        `Senarai nama dikemas kini: ${finalList.length} murid. Data murid yang dibuang telah dipadam di cloud: ${purgeResult.supabaseDeleted}.`
       );
       showPopupStatus("Berjaya disimpan", false);
     } catch (error) {

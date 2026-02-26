@@ -131,7 +131,7 @@
     const localStudents = getLocalStudentsFast();
     if (localStudents.length) {
       hydrateStudents(localStudents);
-      setStatus(`${localStudents.length} murid dipaparkan (data tempatan). Memuatkan dari cloud...`);
+      setStatus(`${localStudents.length} murid dipaparkan. Memuatkan dari cloud...`);
     }
 
     // Phase 2 — fetch Supabase in background and refresh silently.
@@ -168,7 +168,7 @@
       }
       if (syncResult.syncedCount > 0) {
         setStatus(
-          `Data murid berjaya dimuatkan: ${students.length} murid. ${syncResult.syncedCount} rekod local telah disegerakkan ke cloud.`
+          `Data murid berjaya dimuatkan: ${students.length} murid. ${syncResult.syncedCount} rekod tertunda telah disegerakkan ke cloud.`
         );
         return;
       }
@@ -848,7 +848,7 @@
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     } catch (error) {
       console.error(error);
-      const message = `Simpanan ke Supabase gagal (cloud-only, tiada simpanan local). (${String(
+      const message = `Simpanan ke Supabase gagal (cloud-only, tiada simpanan offline). (${String(
         error.message || "ralat tidak diketahui"
       ).slice(0, 180)})`;
       setStatus(message, true);
