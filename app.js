@@ -166,7 +166,7 @@
       el.guruJenis.addEventListener("change", async () => {
         const chosen = String(el.guruJenis.value || "Nilam").trim();
         state.selectedGuruType = GURU_TYPES.includes(chosen) ? chosen : "Nilam";
-        fitSelectWidth(el.guruJenis, 8, 14);
+        fitSelectWidth(el.guruJenis, 12, 14);
         applyGuruModeToVisibleRows();
         if (state.selectedClass) {
           await renderTableAndPrefill();
@@ -227,7 +227,7 @@
       el.guruJenis.appendChild(option);
     });
     el.guruJenis.value = state.selectedGuruType;
-    fitSelectWidth(el.guruJenis, 8, 14);
+    fitSelectWidth(el.guruJenis, 12, 14);
   }
 
   function initTeacherDropdown() {
@@ -275,7 +275,7 @@
 
   function fitEntryControls() {
     fitTeacherNameInputWidth();
-    fitSelectWidth(el.guruJenis, 8, 14);
+    fitSelectWidth(el.guruJenis, 12, 14);
     fitTextInputWidth(el.tarikh, 12, 14);
     fitTextInputWidth(el.tahun, 8, 10);
     fitSelectWidth(el.kelas, 12, 20);
@@ -316,7 +316,7 @@
       ? selectEl.options[selectEl.selectedIndex]
       : null;
     const text = String((option && option.textContent) || selectEl.value || "").trim();
-    const length = text.length ? text.length + 3 : minCh;
+    const length = text.length ? text.length + 4 : minCh;
     const clamped = Math.max(minCh, Math.min(maxCh, length));
     selectEl.style.width = `${clamped}ch`;
   }
