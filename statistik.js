@@ -371,7 +371,7 @@
       slot.bahasa_melayu += Number(row.bahasa_melayu || 0);
       slot.bahasa_inggeris += Number(row.bahasa_inggeris || 0);
       slot.lain_lain_bahasa += Number(row.lain_lain_bahasa || 0);
-      slot.jumlah_bacaan += computeJumlahBacaan(row);
+      slot.jumlah_bacaan += computeBahanBacaan(row);
     });
 
     const rows = [...byClass.values()].sort((a, b) => a.kelas.localeCompare(b.kelas, "ms"));
@@ -388,6 +388,9 @@
     };
     rows.forEach((row) => {
       row.ains_sepanjang_tahun = yearAinsByClass.get(row.kelas) || 0;
+      if (state.includeAinsInJumlah) {
+        row.jumlah_bacaan += row.ains_sepanjang_tahun;
+      }
       total.bahan_digital += row.bahan_digital;
       total.bahan_bukan_buku += row.bahan_bukan_buku;
       total.fiksyen += row.fiksyen;
@@ -510,7 +513,7 @@
         slot.bahasa_melayu += Number(row.bahasa_melayu || 0);
         slot.bahasa_inggeris += Number(row.bahasa_inggeris || 0);
         slot.lain_lain_bahasa += Number(row.lain_lain_bahasa || 0);
-        slot.jumlah_bacaan += computeJumlahBacaan(row);
+        slot.jumlah_bacaan += computeBahanBacaan(row);
       });
 
     (Array.isArray(yearlyRecords) ? yearlyRecords : [])
@@ -537,6 +540,12 @@
     if (!rows.length) {
       el.summaryTbody.innerHTML = '<tr><td colspan="12" class="empty">Tiada data ringkasan.</td></tr>';
       return;
+    }
+
+    if (state.includeAinsInJumlah) {
+      rows.forEach((row) => {
+        row.jumlah_bacaan += row.ains_sepanjang_tahun;
+      });
     }
 
     const total = {
@@ -759,15 +768,20 @@
   }
 
   function computeJumlahBacaan(row) {
-    const withoutAins =
-      Number(row.bahan_digital || 0) +
-      Number(row.bahan_bukan_buku || 0) +
-      Number(row.fiksyen || 0) +
-      Number(row.bukan_fiksyen || 0);
+    const withoutAins = computeBahanBacaan(row);
     if (!state.includeAinsInJumlah) {
       return withoutAins;
     }
     return withoutAins + Number(row.ains || 0);
+  }
+
+  function computeBahanBacaan(row) {
+    return (
+      Number(row.bahan_digital || 0) +
+      Number(row.bahan_bukan_buku || 0) +
+      Number(row.fiksyen || 0) +
+      Number(row.bukan_fiksyen || 0)
+    );
   }
 
   function renderPie(records) {

@@ -966,8 +966,9 @@
       }
 
       const existingLocal = readAllLocalRecords();
+      const clearedLocal = overwriteAinsForPeriod(existingLocal, year, month, parsed.records);
       const existingByKey = new Map();
-      existingLocal.forEach((row) => {
+      clearedLocal.forEach((row) => {
         const key = recordSessionKey(row);
         if (key) {
           existingByKey.set(key, row);
@@ -976,12 +977,12 @@
       const ainsOverrideRecords = parsed.records.map((row) =>
         buildRecordWithAinsOverride(row, existingByKey)
       );
-      const mergedRecords = mergeRecordsByNoKad(year, month, ainsOverrideRecords);
+      const mergedRecords = mergeRecordsByNoKad(year, month, ainsOverrideRecords, clearedLocal);
       persistLocalRecords(mergedRecords);
 
       let syncNote = "";
       try {
-        await upsertImportedRecordsToSupabase(ainsOverrideRecords);
+        await overwriteAinsInSupabase(year, month, parsed.records, ainsOverrideRecords);
         syncNote = " Data AINS juga disimpan ke Supabase.";
       } catch (syncError) {
         console.error(syncError);
@@ -1401,8 +1402,8 @@
     return [...map.values()];
   }
 
-  function mergeRecordsByNoKad(year, month, importedRecords) {
-    const existing = readAllLocalRecords();
+  function mergeRecordsByNoKad(year, month, importedRecords, baseRecords) {
+    const existing = Array.isArray(baseRecords) ? baseRecords : readAllLocalRecords();
     const map = new Map();
 
     existing.forEach((row) => {
@@ -1434,6 +1435,36 @@
       });
     }
     return merged;
+  }
+
+  function overwriteAinsForPeriod(records, year, month, importedAinsRecords) {
+    const targetYear = String(year || "").trim();
+    const targetMonth = String(month || "").trim();
+    const targetNoKad = new Set(
+      (Array.isArray(importedAinsRecords) ? importedAinsRecords : [])
+        .map((row) => normalizeNoKad(row?.no_kad_pengenalan))
+        .filter(Boolean)
+    );
+    if (!targetNoKad.size) {
+      return Array.isArray(records) ? [...records] : [];
+    }
+
+    const nowIso = new Date().toISOString();
+    return (Array.isArray(records) ? records : []).map((row) => {
+      const rowYear = String(row?.tahun || "").trim();
+      const rowMonth = String(row?.bulan || "").trim();
+      const rowNoKad = normalizeNoKad(row?.no_kad_pengenalan);
+      if (rowYear !== targetYear || rowMonth !== targetMonth || !targetNoKad.has(rowNoKad)) {
+        return row;
+      }
+      const next = {
+        ...row,
+        ains: 0,
+        updated_at_client: nowIso,
+      };
+      next.jumlah_aktiviti = computeJumlahBacaan(next);
+      return next;
+    });
   }
 
   function readAllLocalRecords() {
@@ -1643,6 +1674,79 @@
       const detail = await response.text();
       throw new Error(`Sync import data ke Supabase gagal (${response.status}): ${detail}`);
     }
+  }
+
+  async function overwriteAinsInSupabase(year, month, importedAinsRows, ainsOverrideRecords) {
+    const config = window.NILAM_CONFIG || {};
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return;
+    }
+
+    const targetNoKad = [...new Set(
+      (Array.isArray(importedAinsRows) ? importedAinsRows : [])
+        .map((row) => normalizeNoKad(row?.no_kad_pengenalan))
+        .filter(Boolean)
+    )];
+    if (!targetNoKad.length) {
+      return;
+    }
+
+    const existing = await fetchSupabaseRecordsByNoKadForPeriod(year, month, targetNoKad, config);
+    const cleared = overwriteAinsForPeriod(existing, year, month, importedAinsRows);
+    const byKey = new Map();
+    cleared.forEach((row) => {
+      const key = recordSessionKey(row);
+      if (key) {
+        byKey.set(key, row);
+      }
+    });
+    (Array.isArray(ainsOverrideRecords) ? ainsOverrideRecords : []).forEach((row) => {
+      const key = recordSessionKey(row);
+      if (key) {
+        byKey.set(key, row);
+      }
+    });
+
+    await upsertImportedRecordsToSupabase([...byKey.values()]);
+  }
+
+  async function fetchSupabaseRecordsByNoKadForPeriod(year, month, noKadList, config) {
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const chunkSize = 80;
+    const all = [];
+    for (let i = 0; i < noKadList.length; i += chunkSize) {
+      const chunk = noKadList.slice(i, i + chunkSize);
+      const params = new URLSearchParams({
+        select:
+          "tahun,bulan,tarikh,nama_pengisi,guru,bil,no_kad_pengenalan,nama,kelas,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
+        tahun: `eq.${year}`,
+        bulan: `eq.${month}`,
+        no_kad_pengenalan: `in.(${chunk.join(",")})`,
+        limit: "50000",
+      });
+      const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
+      const response = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${config.supabaseAnonKey}`,
+        },
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`Semakan rekod Supabase untuk overwrite AINS gagal (${response.status}): ${detail}`);
+      }
+      const rows = await response.json();
+      if (Array.isArray(rows) && rows.length) {
+        rows.forEach((row) => {
+          const normalized = normalizeImportedRecord(row, "");
+          if (normalized) {
+            all.push(normalized);
+          }
+        });
+      }
+    }
+    return all;
   }
 
   function toInt999(value) {
