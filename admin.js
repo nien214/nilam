@@ -990,12 +990,24 @@
         syncNote = " Simpanan Supabase gagal, tetapi data AINS telah disimpan ke local.";
       }
 
-      const unmatchedNote = parsed.unmatchedCount
-        ? ` ${parsed.unmatchedCount} baris tidak dipadankan (Nama + ID DELIMa).`
-        : "";
-      setStatus(
-        `Import Data AINS berjaya: ${parsed.records.length} rekod untuk ${year} ${month} telah di-override.${unmatchedNote}${syncNote}`
-      );
+      const baseMessage = `Import Data AINS berjaya: ${parsed.records.length} rekod untuk ${year} ${month} telah di-override.`;
+      if (!parsed.unmatchedCount) {
+        setStatus(`${baseMessage}${syncNote}`);
+      } else {
+        const unmatchedList = (Array.isArray(parsed.unmatchedRows) ? parsed.unmatchedRows : [])
+          .map(
+            (row, idx) =>
+              `<li>${idx + 1}. Baris ${Number(row.rowNumber) || "?"}: ${escapeAttr(row.nama || "(nama kosong)")} | ${escapeAttr(row.email || "(ID DELIMa kosong)")}</li>`
+          )
+          .join("");
+        const html =
+          `${escapeAttr(baseMessage)} ${parsed.unmatchedCount} baris tidak dipadankan (Nama + ID DELIMa).${escapeAttr(syncNote)}` +
+          `<details class="ains-unmatched-block" open>` +
+          `<summary>Lihat senarai baris tidak dipadankan</summary>` +
+          `<ul class="compare-list ains-unmatched-list">${unmatchedList}</ul>` +
+          `</details>`;
+        setStatusHtml(html);
+      }
       showPopupStatus("Berjaya disimpan", false);
     } catch (error) {
       console.error(error);
@@ -1268,7 +1280,8 @@
     const nowIso = new Date().toISOString();
     const records = [];
     let unmatchedCount = 0;
-    rows.forEach((row) => {
+    const unmatchedRows = [];
+    rows.forEach((row, index) => {
       const namaCsv = String(row[namaColumn] || "").trim();
       const emailCsv = String(row[emailColumn] || "").trim();
       const matchKey = toStudentMatchKey(namaCsv, emailCsv);
@@ -1279,6 +1292,11 @@
       const matchedStudent = studentByMatchKey.get(matchKey);
       if (!matchedStudent || !matchedStudent.kelas || !matchedStudent.nama) {
         unmatchedCount += 1;
+        unmatchedRows.push({
+          rowNumber: index + 2,
+          nama: namaCsv,
+          email: emailCsv,
+        });
         return;
       }
 
@@ -1312,6 +1330,7 @@
     return {
       records: assignBilByClass(dedupeRecordsByNoKad(records)),
       unmatchedCount,
+      unmatchedRows,
     };
   }
 
@@ -2367,6 +2386,11 @@
 
   function setStatus(message, isError) {
     el.status.textContent = message;
+    el.status.style.color = isError ? "#b00020" : "";
+  }
+
+  function setStatusHtml(messageHtml, isError) {
+    el.status.innerHTML = messageHtml;
     el.status.style.color = isError ? "#b00020" : "";
   }
 

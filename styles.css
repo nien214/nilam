@@ -895,6 +895,21 @@ tbody tr:hover > td {
   margin-bottom: 0.15rem;
 }
 
+.ains-unmatched-block {
+  margin-top: 0.45rem;
+}
+
+.ains-unmatched-block summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.ains-unmatched-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+
 .save-toast {
   position: fixed;
   bottom: 2rem;
