@@ -28,6 +28,44 @@
   ];
   const NAMELIST_OVERRIDE_KEY = "nilam_students_override_v1";
 
+
+  const CLOUD_ONLY_MODE = true;
+
+  function localLength() {
+    if (CLOUD_ONLY_MODE) {
+      return 0;
+    }
+    return window.localStorage.length;
+  }
+
+  function localKey(index) {
+    if (CLOUD_ONLY_MODE) {
+      return null;
+    }
+    return window.localStorage.key(index);
+  }
+
+  function localGetItem(key) {
+    if (CLOUD_ONLY_MODE) {
+      return null;
+    }
+    return window.localStorage.getItem(key);
+  }
+
+  function localSetItem(key, value) {
+    if (CLOUD_ONLY_MODE) {
+      return;
+    }
+    window.localStorage.setItem(key, value);
+  }
+
+  function localRemoveItem(key) {
+    if (CLOUD_ONLY_MODE) {
+      return;
+    }
+    window.localStorage.removeItem(key);
+  }
+
   function normalizeText(value) {
     return String(value || "").trim();
   }
@@ -84,6 +122,12 @@
 
   async function getStudents(config) {
     const selectedYear = String(new Date().getFullYear());
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      if (CLOUD_ONLY_MODE) {
+        throw new Error("Cloud-only mode memerlukan konfigurasi Supabase.");
+      }
+      return [];
+    }
 
     // Supabase is always authoritative — active=neq.false filtered server-side.
     // No-IC students are stored with synthetic NOIC_ IDs in Supabase.
@@ -93,13 +137,19 @@
       if (normalized.length) {
         return normalized;
       }
+      if (CLOUD_ONLY_MODE) {
+        return [];
+      }
     } catch (error) {
       console.error("Gagal muat senarai murid dari Supabase", error);
+      if (CLOUD_ONLY_MODE) {
+        throw error;
+      }
     }
 
     // Offline fallback: localStorage override, then bundled data.
     let localRaw = [];
-    const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
+    const overrideRaw = localGetItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
         const parsed = JSON.parse(overrideRaw);
@@ -230,18 +280,39 @@
   function dedupeRecords(records) {
     const byKey = new Map();
 
-    records.forEach((row) => {
+    (Array.isArray(records) ? records : []).forEach((row, index) => {
       const key = getRecordSessionKey(row);
       if (!key) {
         return;
       }
 
+      const nextTs = parseTimestamp(row.updated_at_client);
       const current = byKey.get(key);
-      if (!current || parseTimestamp(row.updated_at_client) >= parseTimestamp(current.updated_at_client)) {
-        byKey.set(key, row);
+      if (!current || nextTs > current.ts || (nextTs === current.ts && index >= current.index)) {
+        byKey.set(key, { row, ts: nextTs, index });
       }
     });
 
+    return [...byKey.values()].map((entry) => entry.row);
+  }
+
+  function mergeSupabaseAndLocalRecords(supabaseRecords, localRecords) {
+    const byKey = new Map();
+    dedupeRecords(localRecords).forEach((row) => {
+      const key = getRecordSessionKey(row);
+      if (!key) {
+        return;
+      }
+      byKey.set(key, row);
+    });
+    dedupeRecords(supabaseRecords).forEach((row) => {
+      const key = getRecordSessionKey(row);
+      if (!key) {
+        return;
+      }
+      // Supabase is authoritative for same session key.
+      byKey.set(key, row);
+    });
     return [...byKey.values()];
   }
 
@@ -289,13 +360,13 @@
     const records = [];
     const prefix = "nilam_records_";
 
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < localLength(); i += 1) {
+      const key = localKey(i);
       if (!key || !key.startsWith(prefix)) {
         continue;
       }
 
-      const raw = localStorage.getItem(key);
+      const raw = localGetItem(key);
       if (!raw) {
         continue;
       }
@@ -329,6 +400,7 @@
     const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
     const response = await fetch(endpoint, {
       method: "GET",
+      cache: "no-store",
       headers: {
         apikey: config.supabaseAnonKey,
         Authorization: `Bearer ${config.supabaseAnonKey}`,
@@ -366,6 +438,7 @@
 
     const response = await fetch(endpoint, {
       method: "GET",
+      cache: "no-store",
       headers: {
         apikey: config.supabaseAnonKey,
         Authorization: `Bearer ${config.supabaseAnonKey}`,
@@ -402,11 +475,14 @@
       supabaseRecords = await getSupabaseRecords(config);
     } catch (error) {
       console.error(error);
+      if (CLOUD_ONLY_MODE) {
+        throw error;
+      }
     }
 
     const allowedByClass = buildAllowedKeysByClass(students);
     const alignedRecords = alignRecordsToCurrentClass(
-      dedupeRecords([...supabaseRecords, ...localRecords]),
+      mergeSupabaseAndLocalRecords(supabaseRecords, localRecords),
       students
     );
     const records = alignedRecords.filter((row) =>

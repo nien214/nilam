@@ -29,6 +29,44 @@
   const NAMELIST_OVERRIDE_KEY = "nilam_students_override_v1";
   const TEACHER_NAMES_KEY = "nilam_teacher_names_v1";
   const GURU_TYPES = ["Nilam", "BM", "BI"];
+
+
+  const CLOUD_ONLY_MODE = true;
+
+  function localLength() {
+    if (CLOUD_ONLY_MODE) {
+      return 0;
+    }
+    return window.localStorage.length;
+  }
+
+  function localKey(index) {
+    if (CLOUD_ONLY_MODE) {
+      return null;
+    }
+    return window.localStorage.key(index);
+  }
+
+  function localGetItem(key) {
+    if (CLOUD_ONLY_MODE) {
+      return null;
+    }
+    return window.localStorage.getItem(key);
+  }
+
+  function localSetItem(key, value) {
+    if (CLOUD_ONLY_MODE) {
+      return;
+    }
+    window.localStorage.setItem(key, value);
+  }
+
+  function localRemoveItem(key) {
+    if (CLOUD_ONLY_MODE) {
+      return;
+    }
+    window.localStorage.removeItem(key);
+  }
   const SYSTEM_TEACHER_NAMES = new Set(["ADMIN_IMPORT", "ADMIN_OVERRIDE", "TIDAK DIKETAHUI"]);
 
   const state = {
@@ -62,7 +100,10 @@
 
   // Load students from localStorage override / bundled data immediately (no network).
   function getLocalStudentsFast() {
-    const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
+    if (CLOUD_ONLY_MODE) {
+      return [];
+    }
+    const overrideRaw = localGetItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
         const parsed = JSON.parse(overrideRaw);
@@ -116,13 +157,6 @@
       }
 
       const syncResult = await autoSyncLocalRecordsToSupabase();
-      if (syncResult.mode === "local_only") {
-        setStatus(
-          `Data murid berjaya dimuatkan: ${students.length} murid. Simpanan merentas peranti belum aktif (isi config.js Supabase).`,
-          true
-        );
-        return;
-      }
       if (syncResult.mode === "cloud_error") {
         setStatus(
           `Data murid berjaya dimuatkan: ${students.length} murid. Sync cloud gagal: ${String(
@@ -140,7 +174,10 @@
       }
       setStatus(`Data murid berjaya dimuatkan: ${students.length} murid.`);
     } catch (error) {
-      setStatus("Gagal memuatkan data murid dari cloud. Data tempatan digunakan.", true);
+      setStatus(
+        `Gagal memuatkan data murid dari cloud. ${String(error?.message || "Sila semak config.js dan sambungan Internet.")}`,
+        true
+      );
       console.error(error);
     }
   }
@@ -174,9 +211,6 @@
         state.selectedGuruType = GURU_TYPES.includes(chosen) ? chosen : "Nilam";
         fitSelectWidth(el.guruJenis, 12, 14);
         applyGuruModeToVisibleRows();
-        if (state.selectedGuruType === "BM" || state.selectedGuruType === "BI") {
-          window.alert("Peringatan mesra: Sila isi bahagian Bahan Bacaan sahaja.");
-        }
         if (state.selectedClass) {
           await renderTableAndPrefill();
         }
@@ -778,13 +812,10 @@
 
     const config = window.NILAM_CONFIG || {};
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
-      saveLocal(records);
-      setStatus(
-        "Rekod disimpan dalam localStorage (fallback). Isi `config.js` untuk simpan ke Supabase."
-      );
-      showToast("Berjaya disimpan");
-      showPopupStatus("Berjaya disimpan", false);
-      loadAndApplyTotals(state.selectedYear, config).catch(() => {});
+      const message = "Cloud-only mode aktif. Isi `config.js` Supabase untuk simpan rekod.";
+      setStatus(message, true);
+      showToast("Simpanan gagal (cloud only)", true);
+      showPopupStatus(message, true);
       return;
     }
 
@@ -811,27 +842,25 @@
         throw new Error(`Ralat simpanan Supabase (${response.status}): ${detail}`);
       }
 
-      saveLocal(records);
       setStatus(`Berjaya simpan ${records.length} rekod ke Supabase.`);
       showToast("Berjaya disimpan");
       showPopupStatus("Berjaya disimpan", false);
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     } catch (error) {
       console.error(error);
-      saveLocal(records);
-      const message = `Simpanan ke Supabase gagal. Rekod disimpan dalam localStorage sebagai sandaran. (${String(
-          error.message || "ralat tidak diketahui"
-        ).slice(0, 180)})`;
+      const message = `Simpanan ke Supabase gagal (cloud-only, tiada simpanan local). (${String(
+        error.message || "ralat tidak diketahui"
+      ).slice(0, 180)})`;
       setStatus(message, true);
-      showToast("Simpanan gagal — disimpan tempatan", true);
-      showPopupStatus("Berjaya disimpan", false);
+      showToast("Simpanan gagal", true);
+      showPopupStatus(message, true);
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     }
   }
 
   function saveLocal(records) {
     const key = `nilam_records_${state.selectedYear}_${state.selectedMonth}_${state.selectedClass}`;
-    const existing = parseStoredRecords(localStorage.getItem(key));
+    const existing = parseStoredRecords(localGetItem(key));
     const mergedByKey = new Map();
     const put = (record) => {
       const normalized = normalizeRecordForCloud(record, parseLocalStorageRecordKey(key), 1);
@@ -842,7 +871,7 @@
     };
     existing.forEach(put);
     records.forEach(put);
-    localStorage.setItem(key, JSON.stringify([...mergedByKey.values()]));
+    localSetItem(key, JSON.stringify([...mergedByKey.values()]));
   }
 
   async function prefillSavedValuesForSelection() {
@@ -961,26 +990,40 @@
 
   function mergeSavedRecords(supabaseRecords, localRecords) {
     const mergedByKey = new Map();
-    const put = (record) => {
+    const putLocal = (record) => {
       const key = getSessionRecordKey(record);
       if (!key) {
         return;
       }
       const existing = mergedByKey.get(key);
+      const nextTs = Date.parse(record.updated_at_client || "") || 0;
       if (!existing) {
-        mergedByKey.set(key, record);
+        mergedByKey.set(key, { record, ts: nextTs, source: "local" });
         return;
       }
-      const currentTs = Date.parse(existing.updated_at_client || "") || 0;
+      if (existing.source !== "local") {
+        return;
+      }
+      if (nextTs >= existing.ts) {
+        mergedByKey.set(key, { record, ts: nextTs, source: "local" });
+      }
+    };
+    const putCloud = (record) => {
+      const key = getSessionRecordKey(record);
+      if (!key) {
+        return;
+      }
       const nextTs = Date.parse(record.updated_at_client || "") || 0;
-      if (nextTs >= currentTs) {
-        mergedByKey.set(key, record);
+      const existing = mergedByKey.get(key);
+      if (!existing || existing.source !== "cloud" || nextTs >= existing.ts) {
+        // Supabase is authoritative for the same session key.
+        mergedByKey.set(key, { record, ts: nextTs, source: "cloud" });
       }
     };
 
-    (Array.isArray(supabaseRecords) ? supabaseRecords : []).forEach(put);
-    (Array.isArray(localRecords) ? localRecords : []).forEach(put);
-    return [...mergedByKey.values()];
+    (Array.isArray(localRecords) ? localRecords : []).forEach(putLocal);
+    (Array.isArray(supabaseRecords) ? supabaseRecords : []).forEach(putCloud);
+    return [...mergedByKey.values()].map((entry) => entry.record);
   }
 
   function loadSavedRecordsFromLocal(year, month, kelas, tarikh, namaPengisi, guruType) {
@@ -988,13 +1031,13 @@
     const yearPrefix = `nilam_records_${year}_${month}_`;
     const legacyPrefix = `nilam_records_${month}_`;
 
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < localLength(); i += 1) {
+      const key = localKey(i);
       if (!key) {
         continue;
       }
       if (key.startsWith(yearPrefix) || key.startsWith(legacyPrefix)) {
-        const parsed = parseStoredRecords(localStorage.getItem(key));
+        const parsed = parseStoredRecords(localGetItem(key));
         if (parsed.length) {
           parsed.forEach((row, index) => {
             const normalized = normalizeRecordForCloud(row, parseLocalStorageRecordKey(key), index + 1);
@@ -1035,11 +1078,11 @@
   function loadLocalRecordsForYear(year) {
     const all = [];
     const prefix = `nilam_records_${year}_`;
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < localLength(); i += 1) {
+      const key = localKey(i);
       if (key && key.startsWith(prefix)) {
         const meta = parseLocalStorageRecordKey(key);
-        parseStoredRecords(localStorage.getItem(key)).forEach((row, index) => {
+        parseStoredRecords(localGetItem(key)).forEach((row, index) => {
           const normalized = normalizeRecordForCloud(row, meta, index + 1);
           if (normalized) {
             all.push(normalized);
@@ -1053,11 +1096,11 @@
   function loadAllLocalRecords() {
     const all = [];
     const prefix = "nilam_records_";
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < localLength(); i += 1) {
+      const key = localKey(i);
       if (key && key.startsWith(prefix)) {
         const meta = parseLocalStorageRecordKey(key);
-        parseStoredRecords(localStorage.getItem(key)).forEach((row, index) => {
+        parseStoredRecords(localGetItem(key)).forEach((row, index) => {
           const normalized = normalizeRecordForCloud(row, meta, index + 1);
           if (normalized) {
             all.push(normalized);
@@ -1091,6 +1134,7 @@
       params.set("tahun", `eq.${year}`);
     }
     const response = await fetch(`${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`, {
+      cache: "no-store",
       headers: {
         apikey: config.supabaseAnonKey,
         Authorization: `Bearer ${config.supabaseAnonKey}`,
@@ -1115,8 +1159,20 @@
           allTimeTotals: computeTotalsMap(allRecords, state.includeAinsInJumlah),
         };
       } catch (error) {
-        console.error("Gagal muat jumlah dari Supabase, guna localStorage", error);
+        console.error("Gagal muat jumlah dari Supabase", error);
+        return {
+          yearAinsTotals: new Map(),
+          yearTotals: new Map(),
+          allTimeTotals: new Map(),
+        };
       }
+    }
+    if (CLOUD_ONLY_MODE) {
+      return {
+        yearAinsTotals: new Map(),
+        yearTotals: new Map(),
+        allTimeTotals: new Map(),
+      };
     }
     const localYearRecords = loadLocalRecordsForYear(year);
     const localAllRecords = loadAllLocalRecords();
@@ -1168,6 +1224,7 @@
 
     const response = await fetch(endpoint, {
       method: "GET",
+      cache: "no-store",
       headers: {
         apikey: config.supabaseAnonKey,
         Authorization: `Bearer ${config.supabaseAnonKey}`,
@@ -1186,6 +1243,9 @@
   async function loadStudents() {
     const config = window.NILAM_CONFIG || {};
     const selectedYear = String(new Date().getFullYear());
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+    }
 
     // Supabase is always authoritative — active=neq.false filtered server-side.
     // No-IC students are stored with synthetic NOIC_ IDs in Supabase.
@@ -1195,13 +1255,19 @@
       if (normalized.length) {
         return normalized;
       }
+      if (CLOUD_ONLY_MODE) {
+        return [];
+      }
     } catch (error) {
       console.error("Gagal muat senarai murid dari Supabase", error);
+      if (CLOUD_ONLY_MODE) {
+        throw error;
+      }
     }
 
     // Offline fallback: localStorage override, then bundled data.
     let localStudents = [];
-    const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
+    const overrideRaw = localGetItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
         const parsed = JSON.parse(overrideRaw);
@@ -1262,6 +1328,7 @@
 
     const response = await fetch(endpoint, {
       method: "GET",
+      cache: "no-store",
       headers: {
         apikey: config.supabaseAnonKey,
         Authorization: `Bearer ${config.supabaseAnonKey}`,
@@ -1440,7 +1507,11 @@
   async function autoSyncLocalRecordsToSupabase() {
     const config = window.NILAM_CONFIG || {};
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
-      return { mode: "local_only", syncedCount: 0 };
+      return {
+        mode: "cloud_error",
+        syncedCount: 0,
+        errorMessage: "Cloud-only mode memerlukan konfigurasi Supabase.",
+      };
     }
 
     const payload = collectLocalRecordsForSync();
@@ -1482,13 +1553,13 @@
 
   function collectLocalRecordsForSync() {
     const dedup = new Map();
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < localLength(); i += 1) {
+      const key = localKey(i);
       if (!key || !key.startsWith("nilam_records_")) {
         continue;
       }
       const meta = parseLocalStorageRecordKey(key);
-      const parsed = parseStoredRecords(localStorage.getItem(key));
+      const parsed = parseStoredRecords(localGetItem(key));
       parsed.forEach((row, index) => {
         const normalized = normalizeRecordForCloud(row, meta, index + 1);
         if (!normalized) {
@@ -1681,7 +1752,7 @@
     const configNames = Array.isArray(window.NILAM_CONFIG?.teacherNames)
       ? window.NILAM_CONFIG.teacherNames
       : [];
-    const localRaw = localStorage.getItem(TEACHER_NAMES_KEY);
+    const localRaw = localGetItem(TEACHER_NAMES_KEY);
     let localNames = [];
     if (localRaw) {
       try {
@@ -1723,6 +1794,7 @@
     const endpoint = `${supabaseUrl}/rest/v1/nilam_teachers?${params.toString()}`;
     const response = await fetch(endpoint, {
       method: "GET",
+      cache: "no-store",
       headers: {
         apikey: config.supabaseAnonKey,
         Authorization: `Bearer ${config.supabaseAnonKey}`,
@@ -1762,7 +1834,7 @@
 
   function saveTeacherNames() {
     state.teacherNames = sanitizeTeacherNames(state.teacherNames);
-    localStorage.setItem(TEACHER_NAMES_KEY, JSON.stringify(state.teacherNames));
+    localSetItem(TEACHER_NAMES_KEY, JSON.stringify(state.teacherNames));
   }
 
   function renderTeacherSuggestions(filterText) {

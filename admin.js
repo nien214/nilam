@@ -6,6 +6,45 @@
   const AUTH_SESSION_KEY = "nilam_admin_auth_v1";
   const NAMELIST_OVERRIDE_KEY = "nilam_students_override_v1";
   const TEACHER_NAMES_KEY = "nilam_teacher_names_v1";
+
+
+  const CLOUD_ONLY_MODE = true;
+
+  function localLength() {
+    if (CLOUD_ONLY_MODE) {
+      return 0;
+    }
+    return window.localStorage.length;
+  }
+
+  function localKey(index) {
+    if (CLOUD_ONLY_MODE) {
+      return null;
+    }
+    return window.localStorage.key(index);
+  }
+
+  function localGetItem(key) {
+    if (CLOUD_ONLY_MODE) {
+      return null;
+    }
+    return window.localStorage.getItem(key);
+  }
+
+  function localSetItem(key, value) {
+    if (CLOUD_ONLY_MODE) {
+      return;
+    }
+    window.localStorage.setItem(key, value);
+  }
+
+  function localRemoveItem(key) {
+    if (CLOUD_ONLY_MODE) {
+      return;
+    }
+    window.localStorage.removeItem(key);
+  }
+
   const MONTHS = window.NILAM_DATA
     ? window.NILAM_DATA.MONTHS
     : [
@@ -703,7 +742,7 @@
         throw new Error("Senarai murid kosong. Tambah sekurang-kurangnya 1 murid.");
       }
 
-      localStorage.setItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(toSave));
+      localSetItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(toSave));
       state.students = toSave;
       state.undoStack = [];
       updateUndoBtn();
@@ -785,7 +824,7 @@
         throw new Error("Auto-sync gagal: Senarai murid kosong.");
       }
 
-      localStorage.setItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(toSync));
+      localSetItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(toSync));
       await upsertStudentsToSupabase(toSync, { deactivateMissing });
       setStatus(`Auto-sync selesai (${toSync.length} murid).`);
     } catch (error) {
@@ -883,7 +922,7 @@
         throw new Error("Tiada rekod sah dijumpai. Pastikan setiap murid ada No. Kad Pengenalan.");
       }
 
-      localStorage.setItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(namelist));
+      localSetItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(namelist));
       state.students = namelist;
       if (state.isManageOpen) {
         renderManageTable();
@@ -938,13 +977,16 @@
       const merged = [...new Set([...existing, ...importedNames])].sort((a, b) =>
         a.localeCompare(b, "ms")
       );
-      localStorage.setItem(TEACHER_NAMES_KEY, JSON.stringify(merged));
+      localSetItem(TEACHER_NAMES_KEY, JSON.stringify(merged));
 
       let syncNote = "";
       try {
         await upsertTeacherNamesToSupabase(merged);
         syncNote = " Senarai nama guru juga disimpan ke Supabase.";
       } catch (syncError) {
+        if (CLOUD_ONLY_MODE) {
+          throw syncError;
+        }
         console.error(syncError);
         const detail = String(syncError?.message || syncError || "").slice(0, 220);
         syncNote = ` Simpanan Supabase gagal (${detail}), tetapi senarai telah disimpan ke local.`;
@@ -1072,6 +1114,9 @@
         await upsertImportedRecordsToSupabase(parsed.records);
         syncNote = " Data juga disimpan ke Supabase.";
       } catch (syncError) {
+        if (CLOUD_ONLY_MODE) {
+          throw syncError;
+        }
         console.error(syncError);
         const detail = String(syncError?.message || syncError || "").slice(0, 220);
         syncNote = ` Simpanan Supabase gagal (${detail}), tetapi data telah disimpan ke local.`;
@@ -1136,6 +1181,9 @@
         await overwriteAinsInSupabase(year, month, parsed.records, ainsOverrideRecords);
         syncNote = " Data AINS juga disimpan ke Supabase.";
       } catch (syncError) {
+        if (CLOUD_ONLY_MODE) {
+          throw syncError;
+        }
         console.error(syncError);
         const detail = String(syncError?.message || syncError || "").slice(0, 220);
         syncNote = ` Simpanan Supabase gagal (${detail}), tetapi data AINS telah disimpan ke local.`;
@@ -1193,14 +1241,20 @@
         throw new Error("Sila pilih kelas dahulu.");
       }
 
+      const config = window.NILAM_CONFIG || {};
+      if (CLOUD_ONLY_MODE && (!config.supabaseUrl || !config.supabaseAnonKey)) {
+        throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+      }
       const localRecords = readAllLocalRecords();
       let supabaseRecords = [];
       let cloudWarning = "";
-      const config = window.NILAM_CONFIG || {};
       if (config.supabaseUrl && config.supabaseAnonKey) {
         try {
           supabaseRecords = await fetchAllSupabaseRecordsForAdmin(config);
         } catch (error) {
+          if (CLOUD_ONLY_MODE) {
+            throw error;
+          }
           console.error(error);
           cloudWarning = ` Muat cloud gagal (${String(error?.message || error || "").slice(0, 160)}), guna data local.`;
         }
@@ -1644,6 +1698,9 @@
           await overwriteNilamUpdateRecordsInSupabase(year, month, kelas, overrideRecords, config);
           syncNote = " Data juga disimpan ke Supabase.";
         } catch (syncError) {
+          if (CLOUD_ONLY_MODE) {
+            throw syncError;
+          }
           console.error(syncError);
           const detail = String(syncError?.message || syncError || "").slice(0, 220);
           syncNote = ` Simpanan Supabase gagal (${detail}), tetapi data telah disimpan ke local.`;
@@ -1764,14 +1821,14 @@
 
     let localDeletedCount = 0;
     const localKeys = [];
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < localLength(); i += 1) {
+      const key = localKey(i);
       if (key && key.startsWith("nilam_records_")) {
         localKeys.push(key);
       }
     }
     localKeys.forEach((key) => {
-      localStorage.removeItem(key);
+      localRemoveItem(key);
       localDeletedCount += 1;
     });
 
@@ -2248,12 +2305,12 @@
 
   function readAllLocalRecords() {
     const all = [];
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < localLength(); i += 1) {
+      const key = localKey(i);
       if (!key || !key.startsWith("nilam_records_")) {
         continue;
       }
-      const raw = localStorage.getItem(key);
+      const raw = localGetItem(key);
       if (!raw) {
         continue;
       }
@@ -2355,13 +2412,13 @@
 
   function persistLocalRecords(records) {
     const keysToDelete = [];
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < localLength(); i += 1) {
+      const key = localKey(i);
       if (key && key.startsWith("nilam_records_")) {
         keysToDelete.push(key);
       }
     }
-    keysToDelete.forEach((key) => localStorage.removeItem(key));
+    keysToDelete.forEach((key) => localRemoveItem(key));
 
     const grouped = new Map();
     records.forEach((row) => {
@@ -2385,7 +2442,7 @@
           row.bil = idx + 1;
         }
       });
-      localStorage.setItem(key, JSON.stringify(rows));
+      localSetItem(key, JSON.stringify(rows));
     }
   }
 
@@ -2422,7 +2479,7 @@
     });
 
     if (merged.length) {
-      localStorage.setItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(merged));
+      localSetItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(merged));
       state.students = merged;
       if (state.isManageOpen) {
         renderManageTable();
@@ -2432,7 +2489,13 @@
 
   async function upsertImportedRecordsToSupabase(records) {
     const config = window.NILAM_CONFIG || {};
-    if (!config.supabaseUrl || !config.supabaseAnonKey || !records.length) {
+    if (!records.length) {
+      return;
+    }
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      if (CLOUD_ONLY_MODE) {
+        throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+      }
       return;
     }
 
@@ -2546,7 +2609,13 @@
 
   async function upsertImportedRecordsToSupabaseById(records) {
     const config = window.NILAM_CONFIG || {};
-    if (!config.supabaseUrl || !config.supabaseAnonKey || !records.length) {
+    if (!records.length) {
+      return;
+    }
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      if (CLOUD_ONLY_MODE) {
+        throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+      }
       return;
     }
 
@@ -2606,6 +2675,9 @@
   async function overwriteAinsInSupabase(year, month, importedAinsRows, ainsOverrideRecords) {
     const config = window.NILAM_CONFIG || {};
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      if (CLOUD_ONLY_MODE) {
+        throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+      }
       return;
     }
 
@@ -2759,6 +2831,9 @@
     const deactivateMissing = options.deactivateMissing !== false;
     const config = window.NILAM_CONFIG || {};
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      if (CLOUD_ONLY_MODE) {
+        throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+      }
       return;
     }
 
@@ -2855,12 +2930,12 @@
     const allowedByClass = buildAllowedKeysByClass(students);
     let deletedCount = 0;
 
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < localLength(); i += 1) {
+      const key = localKey(i);
       if (!key || !key.startsWith("nilam_records_")) {
         continue;
       }
-      const parsed = parseStoredRecords(localStorage.getItem(key));
+      const parsed = parseStoredRecords(localGetItem(key));
       if (!parsed.length) {
         continue;
       }
@@ -2870,9 +2945,9 @@
       }
       deletedCount += parsed.length - kept.length;
       if (kept.length) {
-        localStorage.setItem(key, JSON.stringify(kept));
+        localSetItem(key, JSON.stringify(kept));
       } else {
-        localStorage.removeItem(key);
+        localRemoveItem(key);
       }
     }
 
@@ -2959,7 +3034,7 @@
   }
 
   function getCurrentNamelist() {
-    const overrideRaw = localStorage.getItem(NAMELIST_OVERRIDE_KEY);
+    const overrideRaw = localGetItem(NAMELIST_OVERRIDE_KEY);
     if (overrideRaw) {
       try {
         const parsed = JSON.parse(overrideRaw);
@@ -2974,7 +3049,7 @@
   }
 
   function loadStoredTeacherNames() {
-    const raw = localStorage.getItem(TEACHER_NAMES_KEY);
+    const raw = localGetItem(TEACHER_NAMES_KEY);
     if (!raw) {
       return [];
     }
@@ -3027,6 +3102,9 @@
   async function upsertTeacherNamesToSupabase(names) {
     const config = window.NILAM_CONFIG || {};
     if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      if (CLOUD_ONLY_MODE) {
+        throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+      }
       return;
     }
     const list = [...new Set((Array.isArray(names) ? names : []).map((name) => String(name || "").trim()).filter(Boolean))];
@@ -3426,7 +3504,7 @@
     closeCompareModal();
 
     try {
-      localStorage.setItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(finalList));
+      localSetItem(NAMELIST_OVERRIDE_KEY, JSON.stringify(finalList));
       state.students = finalList;
       state.undoStack = [];
       updateUndoBtn();
