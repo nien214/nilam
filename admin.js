@@ -1201,7 +1201,7 @@
         tarikh,
         nama_pengisi: "ADMIN_IMPORT",
         guru: "Nilam",
-        bil: 0,
+        bil: 1,
         no_kad_pengenalan: noKad,
         nama,
         kelas,
@@ -1229,7 +1229,7 @@
     });
 
     return {
-      records,
+      records: assignBilByClass(records),
       students: dedupeStudentsByNoKad(students),
     };
   }
@@ -1292,7 +1292,7 @@
         tarikh,
         nama_pengisi: "ADMIN_IMPORT",
         guru: "Nilam",
-        bil: 0,
+        bil: 1,
         no_kad_pengenalan: noKad,
         nama: matchedStudent.nama,
         kelas: matchedStudent.kelas,
@@ -1310,7 +1310,7 @@
     });
 
     return {
-      records: dedupeRecordsByNoKad(records),
+      records: assignBilByClass(dedupeRecordsByNoKad(records)),
       unmatchedCount,
     };
   }
@@ -1348,6 +1348,7 @@
     const fiksyen = toInt999(existing.fiksyen);
     const bukanFiksyen = toInt999(existing.bukan_fiksyen);
     const ains = toInt999(ainsImportRow.ains);
+    const fallbackBil = toPositiveInt(ainsImportRow.bil, 1);
     const bahasaMelayu = toInt999(existing.bahasa_melayu);
     const bahasaInggeris = toInt999(existing.bahasa_inggeris);
     const lainLainBahasa = toInt999(existing.lain_lain_bahasa);
@@ -1358,7 +1359,7 @@
       tarikh: normalizeTarikh(ainsImportRow.tarikh, ainsImportRow.tahun, ainsImportRow.bulan),
       nama_pengisi: String(ainsImportRow.nama_pengisi || "ADMIN_IMPORT").trim(),
       guru: normalizeGuruType(ainsImportRow.guru),
-      bil: Number(existing.bil) > 0 ? Number(existing.bil) : 0,
+      bil: toPositiveInt(existing.bil, fallbackBil),
       no_kad_pengenalan: normalizeNoKad(ainsImportRow.no_kad_pengenalan),
       nama: ainsImportRow.nama,
       kelas: ainsImportRow.kelas,
@@ -1524,7 +1525,7 @@
       tarikh,
       nama_pengisi: namaPengisi,
       guru,
-      bil: Number(row.bil) > 0 ? Number(row.bil) : 0,
+      bil: toPositiveInt(row.bil, 1),
       no_kad_pengenalan: noKad,
       nama,
       kelas,
@@ -1662,6 +1663,10 @@
     const endpoint =
       `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,tarikh,no_kad_pengenalan,nama_pengisi,guru`;
     try {
+      const payload = (Array.isArray(records) ? records : []).map((row) => ({
+        ...row,
+        bil: toPositiveInt(row?.bil, 1),
+      }));
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -1670,7 +1675,7 @@
           Authorization: `Bearer ${config.supabaseAnonKey}`,
           Prefer: "resolution=merge-duplicates,return=minimal",
         },
-        body: JSON.stringify(records),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -1693,7 +1698,10 @@
   }
 
   async function replaceMonthlyAdminImportRecordsInSupabase(records, config) {
-    const safeRecords = Array.isArray(records) ? records.filter(Boolean) : [];
+    const safeRecords = (Array.isArray(records) ? records.filter(Boolean) : []).map((row) => ({
+      ...row,
+      bil: toPositiveInt(row?.bil, 1),
+    }));
     if (!safeRecords.length) {
       return;
     }
@@ -1767,6 +1775,7 @@
     const endpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=id`;
     const payload = records.map((row) => {
       const out = { ...row };
+      out.bil = toPositiveInt(out?.bil, 1);
       if (!Number.isFinite(Number(out.id)) || Number(out.id) <= 0) {
         delete out.id;
       } else {
@@ -1876,6 +1885,39 @@
       return 0;
     }
     return Math.max(0, Math.min(999, Math.trunc(number)));
+  }
+
+  function toPositiveInt(value, fallback = 1) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) {
+      return Math.trunc(number);
+    }
+    return Math.max(1, Math.trunc(Number(fallback) || 1));
+  }
+
+  function assignBilByClass(records) {
+    const list = (Array.isArray(records) ? records : []).map((row) => ({
+      ...row,
+      bil: toPositiveInt(row?.bil, 1),
+    }));
+    const grouped = new Map();
+    list.forEach((row) => {
+      const kelas = String(row?.kelas || "").trim();
+      if (!kelas) {
+        return;
+      }
+      if (!grouped.has(kelas)) {
+        grouped.set(kelas, []);
+      }
+      grouped.get(kelas).push(row);
+    });
+    for (const rows of grouped.values()) {
+      rows.sort((a, b) => String(a?.nama || "").localeCompare(String(b?.nama || ""), "ms"));
+      rows.forEach((row, idx) => {
+        row.bil = idx + 1;
+      });
+    }
+    return list;
   }
 
   // Generates a deterministic synthetic IC for students without one.
