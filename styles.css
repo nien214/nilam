@@ -201,25 +201,25 @@ label {
 }
 
 #entryControls #namaPengisi {
-  min-width: 10ch;
-  max-width: 20ch;
+  min-width: 14ch;
+  max-width: 42ch;
 }
 
 #entryControls #guruJenis {
-  min-width: 7ch;
+  min-width: 8ch;
 }
 
 #entryControls #tarikh {
-  min-width: 10ch;
+  min-width: 12ch;
 }
 
 #entryControls #tahun {
-  min-width: 6ch;
+  min-width: 8ch;
 }
 
 #entryControls #kelas {
-  min-width: 9ch;
-  max-width: 16ch;
+  min-width: 12ch;
+  max-width: 20ch;
 }
 
 #entryControls input[type="date"]::-webkit-datetime-edit,

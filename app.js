@@ -143,11 +143,13 @@
     if (el.namaPengisi) {
       el.namaPengisi.addEventListener("input", () => {
         state.selectedTeacherName = String(el.namaPengisi.value || "").trim();
-        fitTextInputWidth(el.namaPengisi, 10, 20);
+        renderTeacherSuggestions(state.selectedTeacherName);
+        fitTeacherNameInputWidth();
       });
       el.namaPengisi.addEventListener("change", async () => {
         state.selectedTeacherName = String(el.namaPengisi.value || "").trim();
-        fitTextInputWidth(el.namaPengisi, 10, 20);
+        renderTeacherSuggestions(state.selectedTeacherName);
+        fitTeacherNameInputWidth();
         if (state.selectedTeacherName) {
           rememberTeacherName(state.selectedTeacherName);
         }
@@ -155,13 +157,16 @@
           await renderTableAndPrefill();
         }
       });
+      el.namaPengisi.addEventListener("focus", () => {
+        renderTeacherSuggestions(state.selectedTeacherName);
+      });
     }
 
     if (el.guruJenis) {
       el.guruJenis.addEventListener("change", async () => {
         const chosen = String(el.guruJenis.value || "Nilam").trim();
         state.selectedGuruType = GURU_TYPES.includes(chosen) ? chosen : "Nilam";
-        fitSelectWidth(el.guruJenis, 7, 12);
+        fitSelectWidth(el.guruJenis, 8, 14);
         applyGuruModeToVisibleRows();
         if (state.selectedClass) {
           await renderTableAndPrefill();
@@ -175,7 +180,7 @@
         if (!normalized) {
           return;
         }
-        fitTextInputWidth(el.tarikh, 10, 12);
+        fitTextInputWidth(el.tarikh, 12, 14);
         state.selectedDate = normalized;
         const pickedDate = new Date(`${normalized}T00:00:00`);
         state.selectedYear = String(pickedDate.getFullYear());
@@ -191,7 +196,7 @@
 
     el.kelas.addEventListener("change", async () => {
       state.selectedClass = el.kelas.value;
-      fitSelectWidth(el.kelas, 9, 16);
+      fitSelectWidth(el.kelas, 12, 20);
       await renderTableAndPrefill();
     });
 
@@ -222,7 +227,7 @@
       el.guruJenis.appendChild(option);
     });
     el.guruJenis.value = state.selectedGuruType;
-    fitSelectWidth(el.guruJenis, 7, 12);
+    fitSelectWidth(el.guruJenis, 8, 14);
   }
 
   function initTeacherDropdown() {
@@ -230,9 +235,9 @@
       return;
     }
     state.teacherNames = loadTeacherNames();
-    renderTeacherSuggestions();
+    renderTeacherSuggestions(state.selectedTeacherName);
     el.namaPengisi.value = state.selectedTeacherName;
-    fitTextInputWidth(el.namaPengisi, 10, 20);
+    fitTeacherNameInputWidth();
   }
 
   function initDateField() {
@@ -243,11 +248,11 @@
     state.selectedMonth = MONTHS[today.getMonth()];
     if (el.tarikh) {
       el.tarikh.value = isoDate;
-      fitTextInputWidth(el.tarikh, 10, 12);
+      fitTextInputWidth(el.tarikh, 12, 14);
     }
     if (el.tahun) {
       el.tahun.value = state.selectedYear;
-      fitTextInputWidth(el.tahun, 6, 8);
+      fitTextInputWidth(el.tahun, 8, 10);
     }
   }
 
@@ -259,21 +264,36 @@
       option.textContent = className;
       el.kelas.appendChild(option);
     });
-    fitSelectWidth(el.kelas, 9, 16);
+    fitSelectWidth(el.kelas, 12, 20);
   }
 
   function resetClassDropdown() {
     el.kelas.innerHTML = '<option value="">Pilih kelas</option>';
     state.selectedClass = "";
-    fitSelectWidth(el.kelas, 9, 16);
+    fitSelectWidth(el.kelas, 12, 20);
   }
 
   function fitEntryControls() {
-    fitTextInputWidth(el.namaPengisi, 10, 20);
-    fitSelectWidth(el.guruJenis, 7, 12);
-    fitTextInputWidth(el.tarikh, 10, 12);
-    fitTextInputWidth(el.tahun, 6, 8);
-    fitSelectWidth(el.kelas, 9, 16);
+    fitTeacherNameInputWidth();
+    fitSelectWidth(el.guruJenis, 8, 14);
+    fitTextInputWidth(el.tarikh, 12, 14);
+    fitTextInputWidth(el.tahun, 8, 10);
+    fitSelectWidth(el.kelas, 12, 20);
+  }
+
+  function fitTeacherNameInputWidth() {
+    if (!el.namaPengisi) {
+      return;
+    }
+    const valueLen = String(el.namaPengisi.value || "").trim().length;
+    const placeholderLen = String(el.namaPengisi.getAttribute("placeholder") || "").trim().length;
+    const longestSuggestionLen = state.teacherNames.reduce((maxLen, name) => {
+      const len = String(name || "").trim().length;
+      return len > maxLen ? len : maxLen;
+    }, 0);
+    const targetLen = Math.max(valueLen, placeholderLen, longestSuggestionLen);
+    const widthCh = Math.max(14, Math.min(42, targetLen + 2));
+    el.namaPengisi.style.width = `${widthCh}ch`;
   }
 
   function fitTextInputWidth(inputEl, minCh, maxCh) {
@@ -281,7 +301,9 @@
       return;
     }
     const raw = String(inputEl.value || "").trim();
-    const length = raw.length ? raw.length + 2 : minCh;
+    const placeholder = String(inputEl.getAttribute("placeholder") || "").trim();
+    const source = raw || placeholder;
+    const length = source.length ? source.length + 2 : minCh;
     const clamped = Math.max(minCh, Math.min(maxCh, length));
     inputEl.style.width = `${clamped}ch`;
   }
@@ -1533,12 +1555,16 @@
     localStorage.setItem(TEACHER_NAMES_KEY, JSON.stringify(state.teacherNames));
   }
 
-  function renderTeacherSuggestions() {
+  function renderTeacherSuggestions(filterText) {
     if (!el.namaGuruCadangan) {
       return;
     }
+    const query = String(filterText || "").trim().toLowerCase();
+    const names = query
+      ? state.teacherNames.filter((name) => String(name || "").toLowerCase().includes(query))
+      : state.teacherNames;
     el.namaGuruCadangan.innerHTML = "";
-    state.teacherNames.forEach((name) => {
+    names.forEach((name) => {
       const option = document.createElement("option");
       option.value = name;
       el.namaGuruCadangan.appendChild(option);
@@ -1554,8 +1580,9 @@
       state.teacherNames.push(clean);
       state.teacherNames.sort((a, b) => a.localeCompare(b, "ms"));
       saveTeacherNames();
-      renderTeacherSuggestions();
+      renderTeacherSuggestions(state.selectedTeacherName);
     }
+    fitTeacherNameInputWidth();
   }
 
   function applyGuruModeToVisibleRows() {
