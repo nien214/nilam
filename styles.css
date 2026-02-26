@@ -201,6 +201,11 @@ label {
   max-width: 100%;
 }
 
+#entryControls .teacher-name-field {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 #entryControls #namaPengisi {
   min-width: 14ch;
   max-width: 42ch;
@@ -268,10 +273,42 @@ input[type="date"] {
   opacity: 1;
 }
 
-#namaGuruCadangan,
-#namaGuruCadangan option {
-  color: #17252a !important;
-  background-color: #ffffff !important;
+.teacher-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #b5c4ca;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(23, 37, 42, 0.18);
+  z-index: 1200;
+}
+
+.teacher-suggestions[hidden] {
+  display: none;
+}
+
+.teacher-suggestion-item {
+  padding: 0.42rem 0.72rem;
+  color: #17252a;
+  background: #fff;
+  font-size: 0.76rem;
+  line-height: 1.15;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.teacher-suggestion-item:hover {
+  background: #e9f3f5;
+  color: #17252a;
 }
 
 .controls label {

@@ -27,8 +27,10 @@
 
     <section id="entryControls" class="controls" aria-label="Butiran borang">
       <label for="namaPengisi">Nama Guru</label>
-      <input id="namaPengisi" name="namaPengisi" type="text" list="namaGuruCadangan" placeholder="Cari / taip nama guru">
-      <datalist id="namaGuruCadangan"></datalist>
+      <div class="teacher-name-field">
+        <input id="namaPengisi" name="namaPengisi" type="text" placeholder="Cari / taip nama guru" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-controls="namaGuruCadanganList">
+        <ul id="namaGuruCadanganList" class="teacher-suggestions" role="listbox" hidden></ul>
+      </div>
 
       <label for="guruJenis">Guru</label>
       <select id="guruJenis" name="guruJenis">
@@ -94,7 +96,7 @@
 
   <script src="config.js"></script>
   <script src="students-data.js"></script>
-  <script src="app.js?v=20260226d"></script>
+  <script src="app.js?v=20260227a"></script>
   <script src="orientation-hint.js"></script>
 </body>
 </html>

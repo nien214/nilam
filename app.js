@@ -84,7 +84,7 @@
 
   const el = {
     namaPengisi: document.getElementById("namaPengisi"),
-    namaGuruCadangan: document.getElementById("namaGuruCadangan"),
+    namaGuruCadanganList: document.getElementById("namaGuruCadanganList"),
     guruJenis: document.getElementById("guruJenis"),
     tarikh: document.getElementById("tarikh"),
     tahun: document.getElementById("tahun"),
@@ -203,7 +203,33 @@
       el.namaPengisi.addEventListener("focus", () => {
         renderTeacherSuggestions(state.selectedTeacherName);
       });
+      el.namaPengisi.addEventListener("blur", () => {
+        window.setTimeout(() => {
+          hideTeacherSuggestions();
+        }, 120);
+      });
     }
+
+    if (el.namaGuruCadanganList) {
+      el.namaGuruCadanganList.addEventListener("mousedown", (event) => {
+        const target = event.target instanceof HTMLElement ? event.target.closest(".teacher-suggestion-item") : null;
+        if (!target) {
+          return;
+        }
+        event.preventDefault();
+        chooseTeacherSuggestion(String(target.dataset.value || target.textContent || "").trim());
+      });
+    }
+
+    document.addEventListener("click", (event) => {
+      if (!event.target || !(event.target instanceof Element)) {
+        hideTeacherSuggestions();
+        return;
+      }
+      if (!event.target.closest(".teacher-name-field")) {
+        hideTeacherSuggestions();
+      }
+    });
 
     if (el.guruJenis) {
       el.guruJenis.addEventListener("change", async () => {
@@ -1838,7 +1864,7 @@
   }
 
   function renderTeacherSuggestions(filterText) {
-    if (!el.namaGuruCadangan) {
+    if (!el.namaGuruCadanganList || !el.namaPengisi) {
       return;
     }
     const query = String(filterText || "").trim().toLowerCase();
@@ -1846,12 +1872,46 @@
     const names = query
       ? safeNames.filter((name) => String(name || "").toLowerCase().includes(query))
       : safeNames;
-    el.namaGuruCadangan.innerHTML = "";
-    names.forEach((name) => {
-      const option = document.createElement("option");
-      option.value = name;
-      el.namaGuruCadangan.appendChild(option);
+    const uniqueNames = [...new Set(names)].slice(0, 80);
+
+    el.namaGuruCadanganList.innerHTML = "";
+    uniqueNames.forEach((name) => {
+      const item = document.createElement("li");
+      item.className = "teacher-suggestion-item";
+      item.dataset.value = name;
+      item.textContent = name;
+      item.setAttribute("role", "option");
+      el.namaGuruCadanganList.appendChild(item);
     });
+
+    const isFocused = document.activeElement === el.namaPengisi;
+    const inputValue = String(el.namaPengisi.value || "").trim().toLowerCase();
+    const exactMatch = inputValue && uniqueNames.some((name) => name.toLowerCase() === inputValue);
+    const shouldShow = isFocused && uniqueNames.length > 0 && !(exactMatch && uniqueNames.length === 1);
+    el.namaGuruCadanganList.hidden = !shouldShow;
+  }
+
+  function hideTeacherSuggestions() {
+    if (!el.namaGuruCadanganList) {
+      return;
+    }
+    el.namaGuruCadanganList.hidden = true;
+  }
+
+  async function chooseTeacherSuggestion(value) {
+    const chosen = String(value || "").trim();
+    if (!chosen || !el.namaPengisi) {
+      hideTeacherSuggestions();
+      return;
+    }
+    el.namaPengisi.value = chosen;
+    state.selectedTeacherName = chosen;
+    hideTeacherSuggestions();
+    fitTeacherNameInputWidth();
+    rememberTeacherName(chosen);
+    if (state.selectedClass) {
+      await renderTableAndPrefill();
+    }
   }
 
   function rememberTeacherName(value) {

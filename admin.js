@@ -134,7 +134,6 @@
     nilamUpdateYearInput: document.getElementById("updateNilamYearInput"),
     nilamUpdateMonthSelect: document.getElementById("updateNilamMonthSelect"),
     nilamUpdateClassSelect: document.getElementById("updateNilamClassSelect"),
-    nilamUpdateLoadBtn: document.getElementById("loadNilamUpdateBtn"),
     nilamUpdateSaveBtn: document.getElementById("saveNilamUpdateBtn"),
     nilamUpdateTbody: document.getElementById("nilamUpdateTbody"),
     status: document.getElementById("adminStatus"),
@@ -241,8 +240,14 @@
     if (el.confirmCompareBtn) {
       el.confirmCompareBtn.addEventListener("click", confirmCompare);
     }
-    if (el.nilamUpdateLoadBtn) {
-      el.nilamUpdateLoadBtn.addEventListener("click", handleLoadNilamUpdateData);
+    if (el.nilamUpdateYearInput) {
+      el.nilamUpdateYearInput.addEventListener("change", handleNilamUpdateFilterChange);
+    }
+    if (el.nilamUpdateMonthSelect) {
+      el.nilamUpdateMonthSelect.addEventListener("change", handleNilamUpdateFilterChange);
+    }
+    if (el.nilamUpdateClassSelect) {
+      el.nilamUpdateClassSelect.addEventListener("change", handleNilamUpdateFilterChange);
     }
     if (el.nilamUpdateSaveBtn) {
       el.nilamUpdateSaveBtn.addEventListener("click", saveNilamUpdateData);
@@ -422,7 +427,7 @@
       }
       setAdminPanelHidden(true);
       initNilamUpdateFilters();
-      renderNilamUpdateEmpty("Pilih Tahun, Bulan, dan Kelas untuk memuatkan data.");
+      handleNilamUpdateFilterChange();
       setStatus("Kemas Kini Data Nilam dibuka.");
       return;
     }
@@ -521,6 +526,7 @@
     }
 
     state.students = (Array.isArray(raw) ? raw : []).map(normalizeStudentRow).filter((row) => row.nama || row.kelas);
+    sortStudentsByClassThenName();
     if (!state.students.length) {
       state.students = [emptyStudentRow()];
     }
@@ -1256,7 +1262,22 @@
     }
   }
 
-  async function handleLoadNilamUpdateData() {
+  async function handleNilamUpdateFilterChange() {
+    if (!state.isNilamUpdateOpen) {
+      return;
+    }
+    const year = String(el.nilamUpdateYearInput ? el.nilamUpdateYearInput.value : "").trim();
+    const month = normalizeMonth(el.nilamUpdateMonthSelect ? el.nilamUpdateMonthSelect.value : "");
+    if (!/^\d{4}$/.test(year) || !month) {
+      renderNilamUpdateEmpty("Pilih Tahun, Bulan, dan Kelas untuk memuatkan data.");
+      return;
+    }
+    populateNilamUpdateClassOptions();
+    const kelas = String(el.nilamUpdateClassSelect ? el.nilamUpdateClassSelect.value : "").trim();
+    if (!kelas) {
+      renderNilamUpdateEmpty("Pilih Tahun, Bulan, dan Kelas untuk memuatkan data.");
+      return;
+    }
     await loadNilamUpdateDataSelection();
   }
 
@@ -1663,7 +1684,7 @@
         month !== state.nilamUpdateLoadedMonth ||
         kelas !== state.nilamUpdateLoadedClass
       ) {
-        throw new Error("Penapis telah berubah. Klik Muatkan Data dahulu sebelum simpan.");
+        throw new Error("Penapis telah berubah. Sila pilih semula Kelas untuk muat data terkini.");
       }
 
       const nowIso = new Date().toISOString();
@@ -2876,7 +2897,7 @@
     const params = new URLSearchParams({
       select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField},kelas_2026,kelas_2027,kelas_2028,kelas_2029,kelas_2030,kelas_2031`,
       active: "neq.false",
-      order: "nama_murid.asc",
+      order: `${kelasField}.asc,nama_murid.asc`,
       limit: "50000",
     });
     const endpoint = `${supabaseUrl}/rest/v1/nilam_students?${params.toString()}`;
