@@ -179,6 +179,57 @@ label {
   flex: 0 0 auto;
 }
 
+#entryControls {
+  gap: 8px;
+}
+
+#entryControls label {
+  white-space: nowrap;
+  font-size: 0.76rem;
+  line-height: 1.15;
+}
+
+#entryControls > select,
+#entryControls > input[type="number"],
+#entryControls > input[type="text"],
+#entryControls > input[type="date"] {
+  width: auto;
+  flex: 0 0 auto;
+  font-size: 0.76rem;
+  line-height: 1.15;
+}
+
+#entryControls #namaPengisi {
+  width: 16ch;
+  min-width: 16ch;
+}
+
+#entryControls #guruJenis {
+  width: 8.5ch;
+  min-width: 8.5ch;
+}
+
+#entryControls #tarikh {
+  width: 10.5ch;
+  min-width: 10.5ch;
+}
+
+#entryControls #tahun {
+  width: 7ch;
+  min-width: 7ch;
+}
+
+#entryControls #kelas {
+  width: 10.5ch;
+  min-width: 10.5ch;
+}
+
+#entryControls input[type="date"]::-webkit-datetime-edit,
+#entryControls input[type="date"]::-webkit-date-and-time-value {
+  font-size: 0.76rem;
+  line-height: 1.15;
+}
+
 label[for="kelas"] {
   margin-left: 0;
 }
