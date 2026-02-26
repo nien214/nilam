@@ -22,29 +22,35 @@
     "bahan_bukan_buku",
     "fiksyen",
     "bukan_fiksyen",
-    "ains",
     "bahasa_melayu",
     "bahasa_inggeris",
     "lain_lain_bahasa",
   ];
   const NAMELIST_OVERRIDE_KEY = "nilam_students_override_v1";
+  const TEACHER_NAMES_KEY = "nilam_teacher_names_v1";
+  const GURU_TYPES = ["Nilam", "BM", "BI"];
 
   const state = {
     rawStudents: [],
     selectedYear: String(new Date().getFullYear()),
     selectedClass: "",
     selectedMonth: "",
-    includeAinsInJumlah: true,
+    selectedDate: "",
+    selectedTeacherName: "",
+    selectedGuruType: "Nilam",
+    teacherNames: [],
     prefillRequestSeq: 0,
   };
 
   const el = {
+    namaPengisi: document.getElementById("namaPengisi"),
+    namaGuruCadangan: document.getElementById("namaGuruCadangan"),
+    guruJenis: document.getElementById("guruJenis"),
+    tarikh: document.getElementById("tarikh"),
     tahun: document.getElementById("tahun"),
-    bulan: document.getElementById("bulan"),
     kelas: document.getElementById("kelas"),
     tbody: document.querySelector("#studentTable tbody"),
     status: document.getElementById("status"),
-    includeAinsCheckbox: document.getElementById("includeAinsJumlah"),
     saveAll: document.getElementById("saveAll"),
     saveAllBottom: document.getElementById("saveAllBottom"),
   };
@@ -68,7 +74,9 @@
 
   async function init() {
     initYearField();
-    initMonthDropdown();
+    initGuruDropdown();
+    initTeacherDropdown();
+    initDateField();
     bindEvents();
 
     // Phase 1 — show local data instantly (no network wait).
@@ -131,26 +139,55 @@
   }
 
   function bindEvents() {
+    if (el.namaPengisi) {
+      el.namaPengisi.addEventListener("input", () => {
+        state.selectedTeacherName = String(el.namaPengisi.value || "").trim();
+      });
+      el.namaPengisi.addEventListener("change", async () => {
+        state.selectedTeacherName = String(el.namaPengisi.value || "").trim();
+        if (state.selectedTeacherName) {
+          rememberTeacherName(state.selectedTeacherName);
+        }
+        if (state.selectedClass) {
+          await renderTableAndPrefill();
+        }
+      });
+    }
+
+    if (el.guruJenis) {
+      el.guruJenis.addEventListener("change", async () => {
+        const chosen = String(el.guruJenis.value || "Nilam").trim();
+        state.selectedGuruType = GURU_TYPES.includes(chosen) ? chosen : "Nilam";
+        applyGuruModeToVisibleRows();
+        if (state.selectedClass) {
+          await renderTableAndPrefill();
+        }
+      });
+    }
+
+    if (el.tarikh) {
+      el.tarikh.addEventListener("change", async () => {
+        const normalized = normalizeDateInput(el.tarikh.value);
+        if (!normalized) {
+          return;
+        }
+        state.selectedDate = normalized;
+        const pickedDate = new Date(`${normalized}T00:00:00`);
+        state.selectedYear = String(pickedDate.getFullYear());
+        state.selectedMonth = MONTHS[pickedDate.getMonth()];
+        if (el.tahun) {
+          el.tahun.value = state.selectedYear;
+        }
+        if (state.selectedClass) {
+          await renderTableAndPrefill();
+        }
+      });
+    }
+
     el.kelas.addEventListener("change", async () => {
       state.selectedClass = el.kelas.value;
       await renderTableAndPrefill();
     });
-
-    el.bulan.addEventListener("change", async () => {
-      state.selectedMonth = el.bulan.value;
-      if (state.selectedClass) {
-        await renderTableAndPrefill();
-      }
-    });
-    if (el.includeAinsCheckbox) {
-      el.includeAinsCheckbox.checked = true;
-      el.includeAinsCheckbox.addEventListener("change", async () => {
-        state.includeAinsInJumlah = Boolean(el.includeAinsCheckbox.checked);
-        recalculateVisibleJumlahAktiviti();
-        const config = window.NILAM_CONFIG || {};
-        await loadAndApplyTotals(state.selectedYear, config);
-      });
-    }
 
     if (el.saveAll) {
       el.saveAll.addEventListener("click", saveAllRecords);
@@ -167,17 +204,41 @@
     el.tahun.value = state.selectedYear;
   }
 
-  function initMonthDropdown() {
-    MONTHS.forEach((month) => {
+  function initGuruDropdown() {
+    if (!el.guruJenis) {
+      return;
+    }
+    el.guruJenis.innerHTML = "";
+    GURU_TYPES.forEach((guruType) => {
       const option = document.createElement("option");
-      option.value = month;
-      option.textContent = month;
-      el.bulan.appendChild(option);
+      option.value = guruType;
+      option.textContent = guruType;
+      el.guruJenis.appendChild(option);
     });
+    el.guruJenis.value = state.selectedGuruType;
+  }
 
-    const currentMonthIndex = new Date().getMonth();
-    el.bulan.value = MONTHS[currentMonthIndex];
-    state.selectedMonth = MONTHS[currentMonthIndex];
+  function initTeacherDropdown() {
+    if (!el.namaPengisi) {
+      return;
+    }
+    state.teacherNames = loadTeacherNames();
+    renderTeacherSuggestions();
+    el.namaPengisi.value = state.selectedTeacherName;
+  }
+
+  function initDateField() {
+    const today = new Date();
+    const isoDate = toIsoDate(today);
+    state.selectedDate = isoDate;
+    state.selectedYear = String(today.getFullYear());
+    state.selectedMonth = MONTHS[today.getMonth()];
+    if (el.tarikh) {
+      el.tarikh.value = isoDate;
+    }
+    if (el.tahun) {
+      el.tahun.value = state.selectedYear;
+    }
   }
 
   function initClassDropdown(students) {
@@ -203,7 +264,7 @@
     resetClassDropdown();
     initClassDropdown(state.rawStudents);
     el.tbody.innerHTML =
-      '<tr><td colspan="14" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
+      '<tr><td colspan="13" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
   }
 
   async function refreshStudentsPreserveSelectedClass() {
@@ -235,14 +296,14 @@
   function renderTable() {
     if (!state.selectedClass) {
       el.tbody.innerHTML =
-        '<tr><td colspan="14" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
+        '<tr><td colspan="13" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
       return;
     }
 
     const students = state.rawStudents.filter((s) => s.kelas === state.selectedClass);
     if (!students.length) {
       el.tbody.innerHTML =
-        '<tr><td colspan="14" class="empty">Tiada murid untuk kelas ini.</td></tr>';
+        '<tr><td colspan="13" class="empty">Tiada murid untuk kelas ini.</td></tr>';
       return;
     }
 
@@ -254,7 +315,7 @@
         return `
           <tr data-row-id="${rowId}" data-nama="${escapeHtml(student.nama)}" data-kelas="${escapeHtml(
           student.kelas
-        )}" data-no-kad="${escapeHtml(student.no_kad_pengenalan || "")}">
+        )}" data-no-kad="${escapeHtml(student.no_kad_pengenalan || "")}" data-has-saved-session="0">
             <td>${index + 1}</td>
             <td><span class="cell-static cell-name">${escapeHtml(student.nama)}</span></td>
             <td><span class="cell-static">${escapeHtml(student.kelas)}</span></td>
@@ -265,7 +326,6 @@
             <td>${numericInput("bahasa_melayu")}</td>
             <td>${numericInput("bahasa_inggeris")}</td>
             <td>${numericInput("lain_lain_bahasa")}</td>
-            <td><span class="cell-total" data-col="ains">0</span></td>
             <td><span class="cell-total" data-col="jumlah_aktiviti">0</span></td>
             <td><span class="cell-total" data-col="jumlah_tahun">—</span></td>
             <td><span class="cell-total" data-col="jumlah_all_time">—</span></td>
@@ -276,6 +336,7 @@
 
     el.tbody.innerHTML = rowsHtml;
     attachRowInputHandlers();
+    applyGuruModeToVisibleRows();
   }
 
   function numericInput(colName, readOnly = false) {
@@ -284,9 +345,12 @@
   }
 
   function attachRowInputHandlers() {
-    const inputs = el.tbody.querySelectorAll('input[type="number"]:not([readonly])');
+    const inputs = el.tbody.querySelectorAll('input[type="number"]');
     inputs.forEach((input) => {
       input.addEventListener("input", (event) => {
+        if (event.target.readOnly) {
+          return;
+        }
         normalizeIntegerInput(event.target);
         updateJumlahAktiviti(event.target.closest("tr"));
       });
@@ -304,12 +368,15 @@
   }
 
   function updateJumlahAktiviti(row) {
+    if (!row) {
+      return;
+    }
+    applyGuruAutoLanguageForRow(row);
     const total = computeJumlahBacaanFromRecord({
       bahan_digital: getNumberFromCell(row, "bahan_digital"),
       bahan_bukan_buku: getNumberFromCell(row, "bahan_bukan_buku"),
       fiksyen: getNumberFromCell(row, "fiksyen"),
       bukan_fiksyen: getNumberFromCell(row, "bukan_fiksyen"),
-      ains: getNumberFromCell(row, "ains"),
     });
     row.querySelector('[data-col="jumlah_aktiviti"]').textContent = String(total);
   }
@@ -369,6 +436,24 @@
         return;
       }
 
+      const bahanDigital = getNumberFromCell(row, "bahan_digital");
+      const bahanBukanBuku = getNumberFromCell(row, "bahan_bukan_buku");
+      const fiksyen = getNumberFromCell(row, "fiksyen");
+      const bukanFiksyen = getNumberFromCell(row, "bukan_fiksyen");
+      const languageValues = resolveLanguageValuesFromGuruType(
+        state.selectedGuruType,
+        {
+          bahan_digital: bahanDigital,
+          bahan_bukan_buku: bahanBukanBuku,
+          fiksyen,
+          bukan_fiksyen: bukanFiksyen,
+        },
+        {
+          bahasa_melayu: getNumberFromCell(row, "bahasa_melayu"),
+          bahasa_inggeris: getNumberFromCell(row, "bahasa_inggeris"),
+          lain_lain_bahasa: getNumberFromCell(row, "lain_lain_bahasa"),
+        }
+      );
       const jumlahAktiviti = Number(
         row.querySelector('[data-col="jumlah_aktiviti"]').textContent || "0"
       );
@@ -376,17 +461,20 @@
         no_kad_pengenalan: noKad,
         tahun: state.selectedYear,
         bulan: state.selectedMonth,
+        tarikh: state.selectedDate,
+        nama_pengisi: state.selectedTeacherName,
+        guru: state.selectedGuruType,
         bil: bil++,
         nama,
         kelas,
-        bahan_digital: getNumberFromCell(row, "bahan_digital"),
-        bahan_bukan_buku: getNumberFromCell(row, "bahan_bukan_buku"),
-        fiksyen: getNumberFromCell(row, "fiksyen"),
-        bukan_fiksyen: getNumberFromCell(row, "bukan_fiksyen"),
-        ains: getNumberFromCell(row, "ains"),
-        bahasa_melayu: getNumberFromCell(row, "bahasa_melayu"),
-        bahasa_inggeris: getNumberFromCell(row, "bahasa_inggeris"),
-        lain_lain_bahasa: getNumberFromCell(row, "lain_lain_bahasa"),
+        bahan_digital: bahanDigital,
+        bahan_bukan_buku: bahanBukanBuku,
+        fiksyen,
+        bukan_fiksyen: bukanFiksyen,
+        ains: 0,
+        bahasa_melayu: languageValues.bahasa_melayu,
+        bahasa_inggeris: languageValues.bahasa_inggeris,
+        lain_lain_bahasa: languageValues.lain_lain_bahasa,
         jumlah_aktiviti: Number.isFinite(jumlahAktiviti) ? jumlahAktiviti : 0,
         updated_at_client: new Date().toISOString(),
       };
@@ -397,12 +485,51 @@
         }
       }
 
+      const hasAnyInput = inputColumns.some((col) => record[col] > 0);
+      const hadSavedSession = row.dataset.hasSavedSession === "1";
+      if (!hasAnyInput && !hadSavedSession) {
+        return;
+      }
+
       records.push(record);
     });
     return records;
   }
 
   async function saveAllRecords() {
+    state.selectedTeacherName = String(el.namaPengisi?.value || state.selectedTeacherName || "").trim();
+    if (state.selectedTeacherName) {
+      rememberTeacherName(state.selectedTeacherName);
+    }
+    state.selectedGuruType = normalizeGuruType(el.guruJenis?.value || state.selectedGuruType);
+    state.selectedDate = normalizeDateInput(el.tarikh?.value) || state.selectedDate;
+    if (state.selectedDate) {
+      const pickedDate = new Date(`${state.selectedDate}T00:00:00`);
+      state.selectedYear = String(pickedDate.getFullYear());
+      state.selectedMonth = MONTHS[pickedDate.getMonth()];
+      if (el.tahun) {
+        el.tahun.value = state.selectedYear;
+      }
+    }
+
+    if (!state.selectedTeacherName) {
+      const message = "Sila isi Nama Guru dahulu.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
+      return;
+    }
+    if (!state.selectedGuruType) {
+      const message = "Sila pilih jenis Guru dahulu.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
+      return;
+    }
+    if (!state.selectedDate) {
+      const message = "Sila pilih Tarikh dahulu.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
+      return;
+    }
     if (!state.selectedClass) {
       const message = "Sila pilih kelas dahulu.";
       setStatus(message, true);
@@ -439,7 +566,8 @@
     }
 
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
-    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,no_kad_pengenalan`;
+    const endpoint =
+      `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,tarikh,no_kad_pengenalan,nama_pengisi,guru`;
 
     try {
       await ensureStudentsExistInSupabase(records, config);
@@ -480,7 +608,18 @@
 
   function saveLocal(records) {
     const key = `nilam_records_${state.selectedYear}_${state.selectedMonth}_${state.selectedClass}`;
-    localStorage.setItem(key, JSON.stringify(records));
+    const existing = parseStoredRecords(localStorage.getItem(key));
+    const mergedByKey = new Map();
+    const put = (record) => {
+      const normalized = normalizeRecordForCloud(record, parseLocalStorageRecordKey(key), 1);
+      if (!normalized) {
+        return;
+      }
+      mergedByKey.set(getSessionRecordKey(normalized), normalized);
+    };
+    existing.forEach(put);
+    records.forEach(put);
+    localStorage.setItem(key, JSON.stringify([...mergedByKey.values()]));
   }
 
   async function prefillSavedValuesForSelection() {
@@ -490,31 +629,54 @@
 
     const requestSeq = state.prefillRequestSeq + 1;
     state.prefillRequestSeq = requestSeq;
-    const classStudentCount = state.rawStudents.filter((s) => s.kelas === state.selectedClass).length;
-    setPrefillLoadedStatus(
-      state.selectedClass,
-      state.selectedMonth,
-      state.selectedYear,
-      classStudentCount
-    );
-
     const config = window.NILAM_CONFIG || {};
 
     try {
-      const [savedRecords, totals] = await Promise.all([
-        loadSavedRecords(state.selectedYear, state.selectedMonth, state.selectedClass),
-        loadTotals(state.selectedYear, config),
-      ]);
+      const totals = await loadTotals(state.selectedYear, config);
+      if (requestSeq !== state.prefillRequestSeq) {
+        return;
+      }
+      applyTotalsToTable(totals.yearTotals, totals.allTimeTotals);
+
+      if (!state.selectedTeacherName || !state.selectedGuruType || !state.selectedDate) {
+        setStatus(
+          "Sila isi Nama Guru, pilih Guru, Tarikh, dan Kelas. Data dalam jadual ialah untuk sesi baharu.",
+          false
+        );
+        return;
+      }
+
+      const savedRecords = await loadSavedRecords(
+        state.selectedYear,
+        state.selectedMonth,
+        state.selectedClass,
+        state.selectedDate,
+        state.selectedTeacherName,
+        state.selectedGuruType
+      );
       if (requestSeq !== state.prefillRequestSeq) {
         return;
       }
 
       if (savedRecords.length) {
         applySavedRecordsToTable(savedRecords);
-        const latestClassCount = state.rawStudents.filter((s) => s.kelas === state.selectedClass).length;
-        setPrefillLoadedStatus(state.selectedClass, state.selectedMonth, state.selectedYear, latestClassCount);
+        setPrefillLoadedStatus(
+          state.selectedClass,
+          state.selectedMonth,
+          state.selectedYear,
+          state.selectedDate,
+          state.selectedTeacherName,
+          state.selectedGuruType,
+          savedRecords.length
+        );
+      } else {
+        setStatus(
+          `Sesi baharu untuk ${state.selectedTeacherName} (${state.selectedGuruType}) pada ${formatDisplayDate(
+            state.selectedDate
+          )}.`,
+          false
+        );
       }
-      applyTotalsToTable(totals.yearTotals, totals.allTimeTotals);
     } catch (error) {
       if (requestSeq !== state.prefillRequestSeq) {
         return;
@@ -544,16 +706,25 @@
       inputColumns.forEach((colName) => {
         setNumberToCell(row, colName, saved[colName]);
       });
+      row.dataset.hasSavedSession = "1";
       updateJumlahAktiviti(row);
     });
   }
 
-  async function loadSavedRecords(year, month, kelas) {
+  async function loadSavedRecords(year, month, kelas, tarikh, namaPengisi, guruType) {
     const config = window.NILAM_CONFIG || {};
-    const localRecords = loadSavedRecordsFromLocal(year, month);
+    const localRecords = loadSavedRecordsFromLocal(year, month, kelas, tarikh, namaPengisi, guruType);
     if (config.supabaseUrl && config.supabaseAnonKey) {
       try {
-        const supabaseRecords = await loadSavedRecordsFromSupabase(year, month, config);
+        const supabaseRecords = await loadSavedRecordsFromSupabase(
+          year,
+          month,
+          kelas,
+          tarikh,
+          namaPengisi,
+          guruType,
+          config
+        );
         if (supabaseRecords.length || localRecords.length) {
           return mergeSavedRecords(supabaseRecords, localRecords);
         }
@@ -568,10 +739,8 @@
   function mergeSavedRecords(supabaseRecords, localRecords) {
     const mergedByKey = new Map();
     const put = (record) => {
-      const key = `${String(record?.tahun || "").trim()}|${String(record?.bulan || "").trim()}|${String(
-        record?.no_kad_pengenalan || ""
-      ).trim()}`;
-      if (key.endsWith("|")) {
+      const key = getSessionRecordKey(record);
+      if (!key) {
         return;
       }
       const existing = mergedByKey.get(key);
@@ -591,7 +760,7 @@
     return [...mergedByKey.values()];
   }
 
-  function loadSavedRecordsFromLocal(year, month) {
+  function loadSavedRecordsFromLocal(year, month, kelas, tarikh, namaPengisi, guruType) {
     const all = [];
     const yearPrefix = `nilam_records_${year}_${month}_`;
     const legacyPrefix = `nilam_records_${month}_`;
@@ -604,12 +773,27 @@
       if (key.startsWith(yearPrefix) || key.startsWith(legacyPrefix)) {
         const parsed = parseStoredRecords(localStorage.getItem(key));
         if (parsed.length) {
-          all.push(...parsed);
+          parsed.forEach((row, index) => {
+            const normalized = normalizeRecordForCloud(row, parseLocalStorageRecordKey(key), index + 1);
+            if (!normalized) {
+              return;
+            }
+            all.push(normalized);
+          });
         }
       }
     }
 
-    return all;
+    return all.filter((row) => {
+      return (
+        String(row.tahun || "") === String(year) &&
+        String(row.bulan || "") === String(month) &&
+        String(row.kelas || "") === String(kelas || "") &&
+        String(row.tarikh || "") === String(tarikh || "") &&
+        normalizeNameKey(row.nama_pengisi) === normalizeNameKey(namaPengisi) &&
+        normalizeGuruType(row.guru) === normalizeGuruType(guruType)
+      );
+    });
   }
 
   function parseStoredRecords(raw) {
@@ -631,7 +815,13 @@
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);
       if (key && key.startsWith(prefix)) {
-        all.push(...parseStoredRecords(localStorage.getItem(key)));
+        const meta = parseLocalStorageRecordKey(key);
+        parseStoredRecords(localStorage.getItem(key)).forEach((row, index) => {
+          const normalized = normalizeRecordForCloud(row, meta, index + 1);
+          if (normalized) {
+            all.push(normalized);
+          }
+        });
       }
     }
     return all;
@@ -643,7 +833,13 @@
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);
       if (key && key.startsWith(prefix)) {
-        all.push(...parseStoredRecords(localStorage.getItem(key)));
+        const meta = parseLocalStorageRecordKey(key);
+        parseStoredRecords(localStorage.getItem(key)).forEach((row, index) => {
+          const normalized = normalizeRecordForCloud(row, meta, index + 1);
+          if (normalized) {
+            all.push(normalized);
+          }
+        });
       }
     }
     return all;
@@ -662,21 +858,18 @@
   }
 
   function computeJumlahBacaanFromRecord(row) {
-    const withoutAins =
+    return (
       clampNilamNumber(row?.bahan_digital) +
       clampNilamNumber(row?.bahan_bukan_buku) +
       clampNilamNumber(row?.fiksyen) +
-      clampNilamNumber(row?.bukan_fiksyen);
-    if (!state.includeAinsInJumlah) {
-      return withoutAins;
-    }
-    return withoutAins + clampNilamNumber(row?.ains);
+      clampNilamNumber(row?.bukan_fiksyen)
+    );
   }
 
   async function fetchTotalsFromSupabase(year, config) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
-      select: "no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,jumlah_aktiviti",
+      select: "no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,jumlah_aktiviti",
       limit: "10000",
     });
     if (year) {
@@ -735,13 +928,17 @@
     applyTotalsToTable(totals.yearTotals, totals.allTimeTotals);
   }
 
-  async function loadSavedRecordsFromSupabase(year, month, config) {
+  async function loadSavedRecordsFromSupabase(year, month, kelas, tarikh, namaPengisi, guruType, config) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
       select:
-        "tahun,no_kad_pengenalan,nama,kelas,bulan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
+        "tahun,no_kad_pengenalan,nama,kelas,bulan,tarikh,nama_pengisi,guru,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
       tahun: `eq.${year}`,
       bulan: `eq.${month}`,
+      kelas: `eq.${kelas}`,
+      tarikh: `eq.${tarikh}`,
+      nama_pengisi: `eq.${namaPengisi}`,
+      guru: `eq.${guruType}`,
       order: "updated_at_client.desc",
     });
     const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
@@ -758,7 +955,9 @@
       throw new Error(`Ralat muat rekod Supabase (${response.status}): ${detail}`);
     }
     const records = await response.json();
-    return Array.isArray(records) ? records : [];
+    return Array.isArray(records)
+      ? records.map((row, index) => normalizeRecordForCloud(row, { tahun: year, bulan: month, kelas }, index + 1)).filter(Boolean)
+      : [];
   }
 
   async function loadStudents() {
@@ -1027,7 +1226,8 @@
     }
 
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
-    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,no_kad_pengenalan`;
+    const endpoint =
+      `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,tarikh,no_kad_pengenalan,nama_pengisi,guru`;
 
     try {
       await ensureStudentsExistInSupabase(payload, config);
@@ -1071,10 +1271,7 @@
         if (!normalized) {
           return;
         }
-        dedup.set(
-          `${normalized.tahun}|${normalized.bulan}|${normalized.no_kad_pengenalan}`,
-          normalized
-        );
+        dedup.set(getSessionRecordKey(normalized), normalized);
       });
     }
     return [...dedup.values()];
@@ -1098,6 +1295,9 @@
     const bulan = String(row?.bulan || meta.bulan || "").trim();
     const kelas = String(row?.kelas || meta.kelas || "").trim();
     const nama = String(row?.nama || "").trim();
+    const tarikh = normalizeRecordDate(row?.tarikh, tahun, bulan);
+    const namaPengisi = String(row?.nama_pengisi || "").trim() || "Tidak Diketahui";
+    const guruType = normalizeGuruType(row?.guru);
     if (!noKad || !tahun || !bulan || !kelas || !nama) {
       return null;
     }
@@ -1107,9 +1307,20 @@
     const fiksyen = clampNilamNumber(row?.fiksyen);
     const bukanFiksyen = clampNilamNumber(row?.bukan_fiksyen);
     const ains = clampNilamNumber(row?.ains);
-    const bahasaMelayu = clampNilamNumber(row?.bahasa_melayu);
-    const bahasaInggeris = clampNilamNumber(row?.bahasa_inggeris);
-    const lainLainBahasa = clampNilamNumber(row?.lain_lain_bahasa);
+    const languageValues = resolveLanguageValuesFromGuruType(
+      guruType,
+      {
+        bahan_digital: bahanDigital,
+        bahan_bukan_buku: bahanBukanBuku,
+        fiksyen,
+        bukan_fiksyen: bukanFiksyen,
+      },
+      {
+        bahasa_melayu: clampNilamNumber(row?.bahasa_melayu),
+        bahasa_inggeris: clampNilamNumber(row?.bahasa_inggeris),
+        lain_lain_bahasa: clampNilamNumber(row?.lain_lain_bahasa),
+      }
+    );
     const jumlahAsal = Number(row?.jumlah_aktiviti);
     const jumlahAktiviti = Number.isFinite(jumlahAsal)
       ? clampNilamNumber(jumlahAsal, 4995)
@@ -1121,6 +1332,9 @@
       no_kad_pengenalan: noKad,
       tahun,
       bulan,
+      tarikh,
+      nama_pengisi: namaPengisi,
+      guru: guruType,
       bil,
       nama,
       kelas,
@@ -1129,9 +1343,9 @@
       fiksyen,
       bukan_fiksyen: bukanFiksyen,
       ains,
-      bahasa_melayu: bahasaMelayu,
-      bahasa_inggeris: bahasaInggeris,
-      lain_lain_bahasa: lainLainBahasa,
+      bahasa_melayu: languageValues.bahasa_melayu,
+      bahasa_inggeris: languageValues.bahasa_inggeris,
+      lain_lain_bahasa: languageValues.lain_lain_bahasa,
       jumlah_aktiviti: jumlahAktiviti,
       updated_at_client: row?.updated_at_client || new Date().toISOString(),
     };
@@ -1226,7 +1440,7 @@
     el.status.style.color = isError ? "#b00020" : "";
   }
 
-  function setPrefillLoadedStatus(kelas, bulan, tahun, recordCount) {
+  function setPrefillLoadedStatus(kelas, bulan, tahun, tarikh, namaPengisi, guruType, recordCount) {
     setStatusHtml(
       `Data terdahulu dimuatkan untuk <span class="status-emph-kelas">Kelas ${escapeHtml(
         kelas
@@ -1234,12 +1448,203 @@
         bulan
       )}</span> tahun <span class="status-emph-tahun">${escapeHtml(
         tahun
-      )}</span> (${Number(recordCount) || 0} rekod).`
+      )}</span>, Tarikh ${escapeHtml(formatDisplayDate(tarikh))}, Nama ${escapeHtml(
+        namaPengisi
+      )}, Guru ${escapeHtml(guruType)} (${Number(recordCount) || 0} rekod).`
     );
   }
 
+  function loadTeacherNames() {
+    const configNames = Array.isArray(window.NILAM_CONFIG?.teacherNames)
+      ? window.NILAM_CONFIG.teacherNames
+      : [];
+    const localRaw = localStorage.getItem(TEACHER_NAMES_KEY);
+    let localNames = [];
+    if (localRaw) {
+      try {
+        const parsed = JSON.parse(localRaw);
+        if (Array.isArray(parsed)) {
+          localNames = parsed;
+        }
+      } catch (error) {
+        console.error("Gagal parse senarai nama guru", error);
+      }
+    }
+    const merged = new Set();
+    [...configNames, ...localNames].forEach((value) => {
+      const clean = String(value || "").trim();
+      if (clean) {
+        merged.add(clean);
+      }
+    });
+    loadAllLocalRecords().forEach((row) => {
+      const clean = String(row?.nama_pengisi || "").trim();
+      if (clean && clean !== "Tidak Diketahui") {
+        merged.add(clean);
+      }
+    });
+    return [...merged].sort((a, b) => a.localeCompare(b, "ms"));
+  }
+
+  function saveTeacherNames() {
+    localStorage.setItem(TEACHER_NAMES_KEY, JSON.stringify(state.teacherNames));
+  }
+
+  function renderTeacherSuggestions() {
+    if (!el.namaGuruCadangan) {
+      return;
+    }
+    el.namaGuruCadangan.innerHTML = "";
+    state.teacherNames.forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      el.namaGuruCadangan.appendChild(option);
+    });
+  }
+
+  function rememberTeacherName(value) {
+    const clean = String(value || "").trim();
+    if (!clean) {
+      return;
+    }
+    if (!state.teacherNames.includes(clean)) {
+      state.teacherNames.push(clean);
+      state.teacherNames.sort((a, b) => a.localeCompare(b, "ms"));
+      saveTeacherNames();
+      renderTeacherSuggestions();
+    }
+  }
+
+  function applyGuruModeToVisibleRows() {
+    const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
+    const isAutoGuru = state.selectedGuruType === "BM" || state.selectedGuruType === "BI";
+    rows.forEach((row) => {
+      ["bahasa_melayu", "bahasa_inggeris", "lain_lain_bahasa"].forEach((colName) => {
+        const input = row.querySelector(`input[data-col="${colName}"]`);
+        if (input) {
+          input.readOnly = isAutoGuru;
+        }
+      });
+      updateJumlahAktiviti(row);
+    });
+  }
+
+  function applyGuruAutoLanguageForRow(row) {
+    if (!row) {
+      return;
+    }
+    const nextValues = resolveLanguageValuesFromGuruType(
+      state.selectedGuruType,
+      {
+        bahan_digital: getNumberFromCell(row, "bahan_digital"),
+        bahan_bukan_buku: getNumberFromCell(row, "bahan_bukan_buku"),
+        fiksyen: getNumberFromCell(row, "fiksyen"),
+        bukan_fiksyen: getNumberFromCell(row, "bukan_fiksyen"),
+      },
+      {
+        bahasa_melayu: getNumberFromCell(row, "bahasa_melayu"),
+        bahasa_inggeris: getNumberFromCell(row, "bahasa_inggeris"),
+        lain_lain_bahasa: getNumberFromCell(row, "lain_lain_bahasa"),
+      }
+    );
+    setNumberToCell(row, "bahasa_melayu", nextValues.bahasa_melayu);
+    setNumberToCell(row, "bahasa_inggeris", nextValues.bahasa_inggeris);
+    setNumberToCell(row, "lain_lain_bahasa", nextValues.lain_lain_bahasa);
+  }
+
+  function resolveLanguageValuesFromGuruType(guruType, materials, currentLanguage) {
+    const normalizedType = normalizeGuruType(guruType);
+    const totalMaterials =
+      clampNilamNumber(materials?.bahan_digital) +
+      clampNilamNumber(materials?.bahan_bukan_buku) +
+      clampNilamNumber(materials?.fiksyen) +
+      clampNilamNumber(materials?.bukan_fiksyen);
+
+    if (normalizedType === "BM") {
+      return {
+        bahasa_melayu: totalMaterials,
+        bahasa_inggeris: 0,
+        lain_lain_bahasa: 0,
+      };
+    }
+    if (normalizedType === "BI") {
+      return {
+        bahasa_melayu: 0,
+        bahasa_inggeris: totalMaterials,
+        lain_lain_bahasa: 0,
+      };
+    }
+    return {
+      bahasa_melayu: clampNilamNumber(currentLanguage?.bahasa_melayu),
+      bahasa_inggeris: clampNilamNumber(currentLanguage?.bahasa_inggeris),
+      lain_lain_bahasa: clampNilamNumber(currentLanguage?.lain_lain_bahasa),
+    };
+  }
+
+  function normalizeGuruType(value) {
+    const text = String(value || "").trim();
+    if (text === "BM" || text === "BI" || text === "Nilam") {
+      return text;
+    }
+    return "Nilam";
+  }
+
+  function normalizeDateInput(value) {
+    const raw = String(value || "").trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "";
+  }
+
+  function normalizeRecordDate(rawDate, tahun, bulan) {
+    const normalized = normalizeDateInput(rawDate);
+    if (normalized) {
+      return normalized;
+    }
+    const monthIndex = MONTHS.findIndex((m) => m.toLowerCase() === String(bulan || "").trim().toLowerCase());
+    if (/^\d{4}$/.test(String(tahun || "")) && monthIndex >= 0) {
+      return `${tahun}-${String(monthIndex + 1).padStart(2, "0")}-01`;
+    }
+    if (/^\d{4}$/.test(String(tahun || ""))) {
+      return `${tahun}-01-01`;
+    }
+    return "1970-01-01";
+  }
+
+  function toIsoDate(dateValue) {
+    const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function formatDisplayDate(isoDate) {
+    const safe = normalizeDateInput(isoDate);
+    if (!safe) {
+      return String(isoDate || "-");
+    }
+    const [year, month, day] = safe.split("-");
+    return `${day}/${month}/${year}`;
+  }
+
+  function normalizeNameKey(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function getSessionRecordKey(record) {
+    const tahun = String(record?.tahun || "").trim();
+    const bulan = String(record?.bulan || "").trim();
+    const noKad = String(record?.no_kad_pengenalan || "").trim();
+    const tarikh = normalizeRecordDate(record?.tarikh, tahun, bulan);
+    const namaPengisi = normalizeNameKey(record?.nama_pengisi || "");
+    const guru = normalizeGuruType(record?.guru);
+    if (!tahun || !bulan || !tarikh || !noKad || !namaPengisi || !guru) {
+      return "";
+    }
+    return `${tahun}|${bulan}|${tarikh}|${noKad}|${namaPengisi}|${guru}`;
+  }
+
   function escapeHtml(value) {
-    return value
+    return String(value || "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")

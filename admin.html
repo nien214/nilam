@@ -37,34 +37,43 @@
         <button id="manageStudentsBtn" type="button" class="save-btn admin-action-btn">Pengurusan Senarai Murid</button>
 
         <button id="compareNamelistBtn" type="button" class="save-btn admin-action-btn">Banding Senarai Nama</button>
-        <input id="compareFileInput" type="file" accept=".csv,text/csv" hidden>
+        <input id="compareFileInput" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
 
         <div class="admin-action-row">
           <button id="importNamelistBtn" type="button" class="save-btn admin-action-btn">Import Senarai Nama</button>
           <span class="info-badge" tabindex="0" role="button" aria-label="Info Import Senarai Nama" aria-expanded="false">
             i
-            <span class="info-popover">Warning: This will overwrites the current namelist.</span>
+            <span class="info-popover">Warning: This will overwrites the current namelist. Sokong CSV dan Excel.</span>
           </span>
         </div>
-        <input id="namelistFileInput" type="file" accept=".csv,text/csv" hidden>
+        <input id="namelistFileInput" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+
+        <div class="admin-action-row">
+          <button id="importTeachersBtn" type="button" class="save-btn admin-action-btn">Import Nama Guru</button>
+          <span class="info-badge" tabindex="0" role="button" aria-label="Info Import Nama Guru" aria-expanded="false">
+            i
+            <span class="info-popover">Sokong CSV dan Excel. Header wajib: Nama Guru.</span>
+          </span>
+        </div>
+        <input id="teachersFileInput" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
 
         <div class="admin-action-row">
           <button id="importDataBtn" type="button" class="save-btn admin-action-btn">Import Data</button>
           <span class="info-badge" tabindex="0" role="button" aria-label="Info Import Data" aria-expanded="false">
             i
-            <span class="info-popover">Import data akan merge ikut Tahun + Bulan + No. Kad Pengenalan. Jika data wujud, nilai baharu akan override.</span>
+            <span class="info-popover">Import data akan merge ikut Tahun + Bulan + No. Kad Pengenalan. Jika data wujud, nilai baharu akan override. Sokong CSV dan Excel.</span>
           </span>
         </div>
-        <input id="dataFileInput" type="file" accept=".csv,text/csv" hidden>
+        <input id="dataFileInput" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
 
         <div class="admin-action-row">
           <button id="importAinsBtn" type="button" class="save-btn admin-action-btn">Import Data AINS</button>
           <span class="info-badge" tabindex="0" role="button" aria-label="Info Import Data AINS" aria-expanded="false">
             i
-            <span class="info-popover">Import Data AINS akan padankan Nama + ID DELIMa (Email Google Classroom), kemudian override nilai AINS untuk Tahun + Bulan dipilih.</span>
+            <span class="info-popover">Import Data AINS akan padankan Nama + ID DELIMa (Email Google Classroom), kemudian override nilai AINS untuk Tahun + Bulan dipilih. Sokong CSV dan Excel.</span>
           </span>
         </div>
-        <input id="ainsFileInput" type="file" accept=".csv,text/csv" hidden>
+        <input id="ainsFileInput" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
 
         <div class="admin-action-row">
           <button id="resetDataBtn" type="button" class="save-btn danger-btn admin-action-btn">Hapus Semua Data</button>
@@ -147,7 +156,7 @@
 
   <div id="importDataModal" class="modal-backdrop" hidden>
     <div class="modal-card">
-      <h3>Import Data CSV</h3>
+      <h3>Import Data</h3>
       <div class="inline-fields">
         <label for="importYearInput">Tahun</label>
         <input id="importYearInput" type="number" min="2000" max="2100" step="1">
@@ -177,6 +186,7 @@
   <script src="config.js"></script>
   <script src="students-data.js"></script>
   <script src="shared-data.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="admin.js"></script>
   <script src="orientation-hint.js"></script>
 </body>

@@ -32,6 +32,56 @@
     return String(value || "").trim();
   }
 
+  function normalizeNameKey(value) {
+    return normalizeText(value).toLowerCase();
+  }
+
+  function normalizeGuruType(value) {
+    const clean = normalizeText(value);
+    if (clean === "BM" || clean === "BI" || clean === "Nilam") {
+      return clean;
+    }
+    return "Nilam";
+  }
+
+  function normalizeDateInput(value) {
+    const clean = normalizeText(value);
+    return /^\d{4}-\d{2}-\d{2}$/.test(clean) ? clean : "";
+  }
+
+  function normalizeRecordDate(rawDate, tahun, bulan) {
+    const normalized = normalizeDateInput(rawDate);
+    if (normalized) {
+      return normalized;
+    }
+    const monthIndex = MONTHS.findIndex((m) => m.toLowerCase() === normalizeText(bulan).toLowerCase());
+    if (/^\d{4}$/.test(String(tahun || "")) && monthIndex >= 0) {
+      return `${tahun}-${String(monthIndex + 1).padStart(2, "0")}-01`;
+    }
+    if (/^\d{4}$/.test(String(tahun || ""))) {
+      return `${tahun}-01-01`;
+    }
+    return "";
+  }
+
+  function getRecordSessionKey(row) {
+    const tahun = normalizeText(row.tahun) || String(new Date().getFullYear());
+    const bulan = normalizeText(row.bulan);
+    const noKad = normalizeText(row.no_kad_pengenalan);
+    const kelas = normalizeText(row.kelas);
+    const nama = normalizeText(row.nama);
+    const tarikh = normalizeRecordDate(row.tarikh, tahun, bulan);
+    const namaPengisi = normalizeNameKey(row.nama_pengisi) || "tidak diketahui";
+    const guru = normalizeGuruType(row.guru);
+    if (!tahun || !bulan || !kelas || !nama || !tarikh || !guru) {
+      return "";
+    }
+    if (noKad) {
+      return `${tahun}|${bulan}|${tarikh}|${noKad}|${namaPengisi}|${guru}`;
+    }
+    return `${tahun}|${bulan}|${tarikh}|${kelas}|${nama.toLowerCase()}|${namaPengisi}|${guru}`;
+  }
+
   async function getStudents(config) {
     const selectedYear = String(new Date().getFullYear());
 
@@ -181,18 +231,11 @@
     const byKey = new Map();
 
     records.forEach((row) => {
-      const tahun = normalizeText(row.tahun) || String(new Date().getFullYear());
-      const bulan = normalizeText(row.bulan);
-      const kelas = normalizeText(row.kelas);
-      const nama = normalizeText(row.nama);
-      const noKad = normalizeText(row.no_kad_pengenalan);
-      if (!tahun || !bulan || !kelas || !nama) {
+      const key = getRecordSessionKey(row);
+      if (!key) {
         return;
       }
 
-      const key = noKad
-        ? `${tahun}|${bulan}|${noKad}`
-        : `${tahun}|${bulan}|${kelas}|${nama}`;
       const current = byKey.get(key);
       if (!current || parseTimestamp(row.updated_at_client) >= parseTimestamp(current.updated_at_client)) {
         byKey.set(key, row);
@@ -203,9 +246,15 @@
   }
 
   function normalizeRecord(row) {
+    const tahun = normalizeText(row.tahun) || String(new Date().getFullYear());
+    const bulan = normalizeText(row.bulan);
+    const guru = normalizeGuruType(row.guru);
     const out = {
-      tahun: normalizeText(row.tahun) || String(new Date().getFullYear()),
-      bulan: normalizeText(row.bulan),
+      tahun,
+      bulan,
+      tarikh: normalizeRecordDate(row.tarikh, tahun, bulan),
+      nama_pengisi: normalizeText(row.nama_pengisi) || "Tidak Diketahui",
+      guru,
       kelas: normalizeText(row.kelas),
       nama: normalizeText(row.nama),
       no_kad_pengenalan: normalizeText(row.no_kad_pengenalan),
@@ -272,7 +321,7 @@
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
       select:
-        "tahun,bulan,kelas,nama,no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
+        "tahun,bulan,tarikh,nama_pengisi,guru,kelas,nama,no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
       limit: "50000",
       order: "updated_at_client.desc",
     });

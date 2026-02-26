@@ -116,7 +116,7 @@ body {
 .controls {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
   flex-wrap: nowrap;
   margin-bottom: 1rem;
 }
@@ -125,7 +125,9 @@ label {
   font-weight: 600;
 }
 
-#bulan,
+#namaPengisi,
+#guruJenis,
+#tarikh,
 #kelas,
 #tahun,
 #statTahun,
@@ -133,6 +135,21 @@ label {
 #statTingkatan,
 #statKelas {
   width: 92px;
+}
+
+#namaPengisi {
+  width: 24ch;
+  min-width: 24ch;
+}
+
+#guruJenis {
+  width: 10ch;
+  min-width: 10ch;
+}
+
+#tarikh {
+  width: 14ch;
+  min-width: 14ch;
 }
 
 #statTahun {
@@ -163,7 +180,7 @@ label {
 }
 
 label[for="kelas"] {
-  margin-left: 14px;
+  margin-left: 0;
 }
 
 select,
@@ -173,11 +190,25 @@ button {
 }
 
 select,
-input[type="number"] {
+input[type="number"],
+input[type="text"],
+input[type="date"] {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0.16rem 0.2rem;
   width: 100%;
+  font-size: 0.76rem;
+  line-height: 1.15;
+  height: 2rem;
+}
+
+.controls label {
+  font-size: 0.76rem;
+  line-height: 1.15;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-date-and-time-value {
   font-size: 0.76rem;
   line-height: 1.15;
 }
@@ -264,6 +295,11 @@ button:hover {
 #summaryTable td:nth-child(n+3),
 #summaryTable th:nth-child(n+3) {
   text-align: center;
+}
+
+#summaryTable td:nth-child(12),
+#summaryTable th:nth-child(12) {
+  text-align: left;
 }
 
 .table-actions {
@@ -355,7 +391,7 @@ td:nth-child(11) {
 
 #studentTable th:nth-child(n + 3),
 #studentTable td:nth-child(n + 3) {
-  width: calc((100% - 62ch) / 9);
+  width: calc((100% - 62ch) / 11);
 }
 
 #studentTable th:nth-child(11),
@@ -693,6 +729,12 @@ td:nth-child(11) {
   border-radius: 2px;
 }
 
+.chart-note {
+  margin: 0 0 0.45rem;
+  font-size: 0.8rem;
+  color: #36535c;
+}
+
 .bar-scroll {
   overflow-x: hidden;
 }
@@ -700,6 +742,19 @@ td:nth-child(11) {
 .bar-svg {
   width: 100%;
   height: auto;
+}
+
+#starDistWrap .bar-scroll {
+  width: 520px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+#starDistWrap .bar-svg {
+  width: 520px;
+  max-width: 100%;
+  display: block;
+  margin: 0 auto;
 }
 
 .axis-label {

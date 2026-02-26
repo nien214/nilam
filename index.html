@@ -26,11 +26,22 @@
     </header>
 
     <section class="controls" aria-label="Butiran borang">
+      <label for="namaPengisi">Nama Guru</label>
+      <input id="namaPengisi" name="namaPengisi" type="text" list="namaGuruCadangan" placeholder="Cari / taip nama guru">
+      <datalist id="namaGuruCadangan"></datalist>
+
+      <label for="guruJenis">Guru</label>
+      <select id="guruJenis" name="guruJenis">
+        <option value="Nilam">Nilam</option>
+        <option value="BM">BM</option>
+        <option value="BI">BI</option>
+      </select>
+
+      <label for="tarikh">Tarikh</label>
+      <input id="tarikh" name="tarikh" type="date">
+
       <label for="tahun">Tahun</label>
       <input id="tahun" name="tahun" type="number" readonly>
-
-      <label for="bulan">Bulan</label>
-      <select id="bulan" name="bulan"></select>
 
       <label for="kelas">Kelas</label>
       <select id="kelas" name="kelas">
@@ -39,13 +50,6 @@
     </section>
 
     <p id="status" role="status" aria-live="polite"></p>
-
-    <div class="jumlah-toggle">
-      <label>
-        <input id="includeAinsJumlah" type="checkbox" checked>
-        Jumlah bacaan termasuk AINS
-      </label>
-    </div>
 
     <section class="table-wrap">
       <table id="studentTable">
@@ -61,7 +65,6 @@
             <th>Bahasa<br>Melayu</th>
             <th>Bahasa<br>Inggeris</th>
             <th>Lain-lain<br>Bahasa</th>
-            <th>AINS</th>
             <th>Jumlah Bacaan<br>Bulan ini</th>
             <th>Jumlah Bacaan<br>Tahun ini</th>
             <th>Jumlah Bacaan<br>Sejak Per/T1</th>
@@ -69,7 +72,7 @@
         </thead>
         <tbody>
           <tr>
-            <td colspan="14" class="empty">Pilih kelas untuk paparkan senarai murid.</td>
+            <td colspan="13" class="empty">Pilih kelas untuk paparkan senarai murid.</td>
           </tr>
         </tbody>
       </table>

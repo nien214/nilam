@@ -5,6 +5,7 @@
   const AUTH_PASS = "nilam_admin";
   const AUTH_SESSION_KEY = "nilam_admin_auth_v1";
   const NAMELIST_OVERRIDE_KEY = "nilam_students_override_v1";
+  const TEACHER_NAMES_KEY = "nilam_teacher_names_v1";
   const MONTHS = window.NILAM_DATA
     ? window.NILAM_DATA.MONTHS
     : [
@@ -51,6 +52,8 @@
     cancelLoginBtn: document.getElementById("cancelLoginBtn"),
     importBtn: document.getElementById("importNamelistBtn"),
     fileInput: document.getElementById("namelistFileInput"),
+    importTeachersBtn: document.getElementById("importTeachersBtn"),
+    teachersFileInput: document.getElementById("teachersFileInput"),
     importDataBtn: document.getElementById("importDataBtn"),
     dataFileInput: document.getElementById("dataFileInput"),
     importAinsBtn: document.getElementById("importAinsBtn"),
@@ -120,6 +123,12 @@
     }
     el.importBtn.addEventListener("click", startImport);
     el.fileInput.addEventListener("change", handleImportFile);
+    if (el.importTeachersBtn) {
+      el.importTeachersBtn.addEventListener("click", startImportTeachers);
+    }
+    if (el.teachersFileInput) {
+      el.teachersFileInput.addEventListener("change", handleImportTeachersFile);
+    }
     el.importDataBtn.addEventListener("click", startImportData);
     el.dataFileInput.addEventListener("change", handleImportDataFile);
     if (el.importAinsBtn) {
@@ -670,6 +679,15 @@
     el.fileInput.click();
   }
 
+  function startImportTeachers() {
+    if (!el.teachersFileInput) {
+      setStatus("Input fail untuk import Nama Guru tidak ditemui.", true);
+      return;
+    }
+    el.teachersFileInput.value = "";
+    el.teachersFileInput.click();
+  }
+
   async function handleImportFile(event) {
     const [file] = event.target.files || [];
     if (!file) {
@@ -677,8 +695,7 @@
     }
 
     try {
-      const text = await file.text();
-      const rows = parseCsv(text);
+      const rows = await readRowsFromFile(file);
       const namaColumn = resolveColumnName(rows, ["nama murid", "nama"]);
       const jantinaColumn = resolveColumnName(rows, ["jantina"]);
       const kelasColumn = resolveColumnName(rows, ["kelas 2026", "kelas"]);
@@ -687,7 +704,7 @@
 
       if (!namaColumn || !kelasColumn || !noKadColumn) {
         throw new Error(
-          "Kolum CSV tidak sah. Wajib ada NAMA MURID, Kelas 2026/Kelas, dan No. Kad Pengenalan."
+          "Kolum fail tidak sah. Wajib ada NAMA MURID, Kelas 2026/Kelas, dan No. Kad Pengenalan."
         );
       }
 
@@ -750,6 +767,51 @@
       const message = error.message || "Import namelist gagal.";
       setStatus(message, true);
       showPopupStatus(message, true);
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function handleImportTeachersFile(event) {
+    const [file] = event.target.files || [];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const rows = await readRowsFromFile(file);
+      const namaGuruColumn = resolveColumnName(rows, ["nama guru"]);
+      if (!namaGuruColumn) {
+        const availableHeaders = rows.length ? Object.keys(rows[0]).join(", ") : "(tiada header)";
+        throw new Error(
+          `Kolum fail tidak lengkap. Perlu ada header: Nama Guru. Header dikesan: ${availableHeaders}`
+        );
+      }
+
+      const importedNames = rows
+        .map((row) => String(row[namaGuruColumn] || "").trim())
+        .filter(Boolean);
+      if (!importedNames.length) {
+        throw new Error("Tiada nama guru sah dijumpai.");
+      }
+
+      const existing = loadStoredTeacherNames();
+      const merged = [...new Set([...existing, ...importedNames])].sort((a, b) =>
+        a.localeCompare(b, "ms")
+      );
+      localStorage.setItem(TEACHER_NAMES_KEY, JSON.stringify(merged));
+
+      setStatus(
+        `Import Nama Guru berjaya: ${importedNames.length} nama diproses, jumlah senarai ${merged.length}.`
+      );
+      showPopupStatus("Berjaya disimpan", false);
+    } catch (error) {
+      console.error(error);
+      const message = error.message || "Import Nama Guru gagal.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
+    } finally {
+      event.target.value = "";
     }
   }
 
@@ -846,11 +908,10 @@
         throw new Error("Tahun/Bulan import tiada. Sila klik butang Import Data semula.");
       }
 
-      const text = await file.text();
-      const rows = parseCsv(text);
+      const rows = await readRowsFromFile(file);
       const parsed = parseImportedDataRows(rows, year, month);
       if (!parsed.records.length) {
-        throw new Error("Tiada rekod data sah dijumpai dalam CSV.");
+        throw new Error("Tiada rekod data sah dijumpai dalam fail.");
       }
 
       const mergedRecords = mergeRecordsByNoKad(year, month, parsed.records);
@@ -867,7 +928,7 @@
       }
 
       setStatus(
-        `Import data berjaya dan disimpan automatik: ${parsed.records.length} rekod diproses untuk ${year} ${month}. Data sedia ada telah di-override ikut No. Kad Pengenalan.${syncNote}`
+        `Import data berjaya dan disimpan automatik: ${parsed.records.length} rekod diproses untuk ${year} ${month}. Sesi ADMIN_IMPORT bulan ini telah di-override.${syncNote}`
       );
       showPopupStatus("Berjaya disimpan", false);
     } catch (error) {
@@ -896,8 +957,7 @@
         throw new Error("Tahun/Bulan import AINS tiada. Sila klik butang Import Data AINS semula.");
       }
 
-      const text = await file.text();
-      const rows = parseCsv(text);
+      const rows = await readRowsFromFile(file);
       const parsed = parseImportedAinsRows(rows, year, month);
       if (!parsed.records.length) {
         throw new Error(
@@ -906,12 +966,13 @@
       }
 
       const existingLocal = readAllLocalRecords();
-      const existingByKey = new Map(
-        existingLocal.map((row) => [
-          `${row.tahun}|${row.bulan}|${normalizeNoKad(row.no_kad_pengenalan)}`,
-          row,
-        ])
-      );
+      const existingByKey = new Map();
+      existingLocal.forEach((row) => {
+        const key = recordSessionKey(row);
+        if (key) {
+          existingByKey.set(key, row);
+        }
+      });
       const ainsOverrideRecords = parsed.records.map((row) =>
         buildRecordWithAinsOverride(row, existingByKey)
       );
@@ -1037,6 +1098,46 @@
     return found || "";
   }
 
+  function normalizeGuruType(value) {
+    const normalized = String(value || "").trim();
+    if (normalized === "BM" || normalized === "BI" || normalized === "Nilam") {
+      return normalized;
+    }
+    return "Nilam";
+  }
+
+  function defaultTarikhForPeriod(year, month) {
+    const safeYear = String(year || "").trim();
+    const monthIndex = MONTHS.findIndex(
+      (m) => m.toLowerCase() === String(month || "").trim().toLowerCase()
+    );
+    if (/^\d{4}$/.test(safeYear) && monthIndex >= 0) {
+      return `${safeYear}-${String(monthIndex + 1).padStart(2, "0")}-01`;
+    }
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function normalizeTarikh(value, year, month) {
+    const safe = String(value || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(safe)) {
+      return safe;
+    }
+    return defaultTarikhForPeriod(year, month);
+  }
+
+  function recordSessionKey(row) {
+    const tahun = String(row?.tahun || "").trim();
+    const bulan = String(row?.bulan || "").trim();
+    const tarikh = normalizeTarikh(row?.tarikh, tahun, bulan);
+    const noKad = normalizeNoKad(row?.no_kad_pengenalan);
+    const namaPengisi = String(row?.nama_pengisi || "").trim().toLowerCase();
+    const guru = normalizeGuruType(row?.guru);
+    if (!tahun || !bulan || !tarikh || !noKad || !namaPengisi || !guru) {
+      return "";
+    }
+    return `${tahun}|${bulan}|${tarikh}|${noKad}|${namaPengisi}|${guru}`;
+  }
+
   function parseImportedDataRows(rows, year, month) {
     const namaColumn = resolveColumnName(rows, ["nama murid", "nama"]);
     const jantinaColumn = resolveColumnName(rows, ["jantina"]);
@@ -1067,7 +1168,7 @@
     ) {
       const availableHeaders = rows.length ? Object.keys(rows[0]).join(", ") : "(tiada header)";
       throw new Error(
-        `Kolum data CSV tidak lengkap. Perlu ada: NAMA MURID, No. Kad Pengenalan, Kelas, Bahan Digital, Bahan Bukan Buku, Fiksyen, Bukan Fiksyen, Bahasa Melayu, Bahasa Inggeris, Lain-lain Bahasa. Header dikesan: ${availableHeaders}`
+        `Kolum data fail tidak lengkap. Perlu ada: NAMA MURID, No. Kad Pengenalan, Kelas, Bahan Digital, Bahan Bukan Buku, Fiksyen, Bukan Fiksyen, Bahasa Melayu, Bahasa Inggeris, Lain-lain Bahasa. Header dikesan: ${availableHeaders}`
       );
     }
 
@@ -1090,10 +1191,14 @@
       const bahasaInggeris = toInt999(row[biColumn]);
       const lainLainBahasa = toInt999(row[lainColumn]);
       const jumlahBacaan = bahanDigital + bahanBukanBuku + fiksyen + bukanFiksyen + ains;
+      const tarikh = defaultTarikhForPeriod(year, month);
 
       records.push({
         tahun: year,
         bulan: month,
+        tarikh,
+        nama_pengisi: "ADMIN_IMPORT",
+        guru: "Nilam",
         bil: 0,
         no_kad_pengenalan: noKad,
         nama,
@@ -1142,7 +1247,7 @@
     if (!namaColumn || !emailColumn || !ainsColumn) {
       const availableHeaders = rows.length ? Object.keys(rows[0]).join(", ") : "(tiada header)";
       throw new Error(
-        `Kolum CSV AINS tidak lengkap. Perlu ada: NAMA MURID, ID DELIMa/Email Google Classroom, dan kolum Rekod. Header dikesan: ${availableHeaders}`
+        `Kolum fail AINS tidak lengkap. Perlu ada: NAMA MURID, ID DELIMa/Email Google Classroom, dan kolum Rekod. Header dikesan: ${availableHeaders}`
       );
     }
 
@@ -1177,10 +1282,14 @@
 
       const noKad = matchedStudent.no_kad_pengenalan || syntheticNoKad(matchedStudent);
       const ains = toInt999(row[ainsColumn]);
+      const tarikh = defaultTarikhForPeriod(year, month);
 
       records.push({
         tahun: year,
         bulan: month,
+        tarikh,
+        nama_pengisi: "ADMIN_IMPORT",
+        guru: "Nilam",
         bil: 0,
         no_kad_pengenalan: noKad,
         nama: matchedStudent.nama,
@@ -1207,8 +1316,8 @@
   function dedupeRecordsByNoKad(records) {
     const map = new Map();
     records.forEach((row) => {
-      const key = `${row.tahun}|${row.bulan}|${normalizeNoKad(row.no_kad_pengenalan)}`;
-      if (key.endsWith("|")) {
+      const key = recordSessionKey(row);
+      if (!key) {
         return;
       }
       map.set(key, row);
@@ -1230,7 +1339,7 @@
   }
 
   function buildRecordWithAinsOverride(ainsImportRow, existingByKey) {
-    const key = `${ainsImportRow.tahun}|${ainsImportRow.bulan}|${normalizeNoKad(ainsImportRow.no_kad_pengenalan)}`;
+    const key = recordSessionKey(ainsImportRow);
     const existing = existingByKey.get(key) || {};
     const bahanDigital = toInt999(existing.bahan_digital);
     const bahanBukanBuku = toInt999(existing.bahan_bukan_buku);
@@ -1244,6 +1353,9 @@
     return {
       tahun: ainsImportRow.tahun,
       bulan: ainsImportRow.bulan,
+      tarikh: normalizeTarikh(ainsImportRow.tarikh, ainsImportRow.tahun, ainsImportRow.bulan),
+      nama_pengisi: String(ainsImportRow.nama_pengisi || "ADMIN_IMPORT").trim(),
+      guru: normalizeGuruType(ainsImportRow.guru),
       bil: Number(existing.bil) > 0 ? Number(existing.bil) : 0,
       no_kad_pengenalan: normalizeNoKad(ainsImportRow.no_kad_pengenalan),
       nama: ainsImportRow.nama,
@@ -1294,12 +1406,16 @@
     const map = new Map();
 
     existing.forEach((row) => {
-      const key = `${row.tahun}|${row.bulan}|${normalizeNoKad(row.no_kad_pengenalan)}`;
-      map.set(key, row);
+      const key = recordSessionKey(row);
+      if (key) {
+        map.set(key, row);
+      }
     });
     importedRecords.forEach((row) => {
-      const key = `${row.tahun}|${row.bulan}|${normalizeNoKad(row.no_kad_pengenalan)}`;
-      map.set(key, row);
+      const key = recordSessionKey(row);
+      if (key) {
+        map.set(key, row);
+      }
     });
 
     const merged = [...map.values()];
@@ -1351,10 +1467,13 @@
   function normalizeImportedRecord(row, keyHint) {
     const tahun = String(row.tahun || extractYearFromKey(keyHint) || "").trim();
     const bulan = String(row.bulan || extractMonthFromKey(keyHint) || "").trim();
+    const tarikh = normalizeTarikh(row.tarikh, tahun, bulan);
+    const namaPengisi = String(row.nama_pengisi || "ADMIN_IMPORT").trim();
+    const guru = normalizeGuruType(row.guru);
     const noKad = normalizeNoKad(row.no_kad_pengenalan);
     const nama = String(row.nama || "").trim();
     const kelas = String(row.kelas || "").trim();
-    if (!tahun || !bulan || !noKad || !nama || !kelas) {
+    if (!tahun || !bulan || !tarikh || !namaPengisi || !guru || !noKad || !nama || !kelas) {
       return null;
     }
 
@@ -1369,6 +1488,9 @@
     return {
       tahun,
       bulan,
+      tarikh,
+      nama_pengisi: namaPengisi,
+      guru,
       bil: Number(row.bil) > 0 ? Number(row.bil) : 0,
       no_kad_pengenalan: noKad,
       nama,
@@ -1504,7 +1626,8 @@
     }
 
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
-    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,no_kad_pengenalan`;
+    const endpoint =
+      `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,tarikh,no_kad_pengenalan,nama_pengisi,guru`;
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -1756,11 +1879,62 @@
     return Array.isArray(window.NILAM_STUDENTS) ? window.NILAM_STUDENTS : [];
   }
 
+  function loadStoredTeacherNames() {
+    const raw = localStorage.getItem(TEACHER_NAMES_KEY);
+    if (!raw) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed
+        .map((value) => String(value || "").trim())
+        .filter(Boolean);
+    } catch (error) {
+      console.error("Gagal parse senarai nama guru", error);
+      return [];
+    }
+  }
+
   function normalizeNoKad(value) {
     return String(value || "")
       .replace(/\s+/g, "")
       .toUpperCase()
       .trim();
+  }
+
+  function isExcelFile(file) {
+    const name = String(file?.name || "").toLowerCase();
+    return name.endsWith(".xlsx") || name.endsWith(".xls");
+  }
+
+  async function readRowsFromFile(file) {
+    if (isExcelFile(file)) {
+      return readRowsFromExcel(file);
+    }
+    const text = await file.text();
+    return parseCsv(text);
+  }
+
+  async function readRowsFromExcel(file) {
+    if (!window.XLSX) {
+      throw new Error("Parser Excel tidak tersedia. Sila refresh halaman dan cuba semula.");
+    }
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = window.XLSX.read(arrayBuffer, { type: "array" });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) {
+      return [];
+    }
+    const sheet = workbook.Sheets[firstSheetName];
+    const rows = window.XLSX.utils.sheet_to_json(sheet, {
+      defval: "",
+      raw: false,
+      blankrows: false,
+    });
+    return Array.isArray(rows) ? rows : [];
   }
 
   function parseCsv(content) {
@@ -1960,8 +2134,7 @@
     }
 
     try {
-      const text = await file.text();
-      const rows = parseCsv(text);
+      const rows = await readRowsFromFile(file);
 
       const namaColumn = resolveColumnName(rows, ["nama murid", "nama"]);
       const jantinaColumn = resolveColumnName(rows, ["jantina"]);
@@ -1970,7 +2143,7 @@
       const emailColumn = resolveColumnName(rows, ["email id google classroom", "email google classroom", "email"]);
 
       if (!namaColumn || !kelasColumn) {
-        throw new Error("Kolum CSV tidak sah. Wajib ada NAMA MURID dan Kelas.");
+        throw new Error("Kolum fail tidak sah. Wajib ada NAMA MURID dan Kelas.");
       }
 
       const newStudents = rows
@@ -1986,7 +2159,7 @@
         .filter((row) => row.nama && row.kelas);
 
       if (!newStudents.length) {
-        throw new Error("Tiada murid sah ditemui dalam CSV.");
+        throw new Error("Tiada murid sah ditemui dalam fail.");
       }
 
       // Match by IC when present (and not synthetic), else fall back to normalised name.
@@ -2028,7 +2201,7 @@
       showCompareModal(toAdd, toRemove, toUpdateKelas, toUpdateEmail, newStudents.length);
     } catch (error) {
       console.error(error);
-      setStatus(error.message || "Gagal memuatkan CSV perbandingan.", true);
+      setStatus(error.message || "Gagal memuatkan fail perbandingan.", true);
     } finally {
       if (event.target) {
         event.target.value = "";
@@ -2041,7 +2214,7 @@
       return;
     }
 
-    let html = `<p style="margin:0 0 0.5rem;font-size:0.85rem;color:var(--muted)">Jumlah murid dalam CSV baharu: <strong>${totalNew}</strong></p>`;
+    let html = `<p style="margin:0 0 0.5rem;font-size:0.85rem;color:var(--muted)">Jumlah murid dalam fail baharu: <strong>${totalNew}</strong></p>`;
 
     if (toAdd.length) {
       html += `<p class="compare-section-title compare-add">Baharu — ${toAdd.length} murid akan ditambah:</p>`;

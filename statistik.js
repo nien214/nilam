@@ -28,6 +28,7 @@
     languageTitle: document.getElementById("languageTitle"),
     tingkatanTitle: document.getElementById("tingkatanTitle"),
     barTitle: document.getElementById("barTitle"),
+    starDistTitle: document.getElementById("starDistTitle"),
     heatmapTitle: document.getElementById("heatmapTitle"),
     summaryHeadRow: document.getElementById("summaryHeadRow"),
     summaryTbody: document.getElementById("summaryTbody"),
@@ -35,6 +36,7 @@
     languageWrap: document.getElementById("languageWrap"),
     tingkatanWrap: document.getElementById("tingkatanWrap"),
     barWrap: document.getElementById("barWrap"),
+    starDistWrap: document.getElementById("starDistWrap"),
     heatmapWrap: document.getElementById("heatmapWrap"),
   };
 
@@ -169,6 +171,7 @@
       el.languageWrap.innerHTML = '<p class="empty">Tiada data.</p>';
       el.tingkatanWrap.innerHTML = '<p class="empty">Tiada data.</p>';
       el.barWrap.innerHTML = '<p class="empty">Tiada data.</p>';
+      el.starDistWrap.innerHTML = '<p class="empty">Tiada data.</p>';
       el.heatmapWrap.innerHTML = '<p class="empty">Tiada data.</p>';
       return;
     }
@@ -210,6 +213,7 @@
       el.languageWrap.innerHTML = '<p class="empty">Tiada data bahasa.</p>';
       el.tingkatanWrap.innerHTML = '<p class="empty">Tiada data tingkatan.</p>';
       el.barWrap.innerHTML = '<p class="empty">Tiada data jumlah bacaan.</p>';
+      renderStarDistribution(periodRecords, state.selectedClass, state.selectedTingkatan);
       el.heatmapWrap.innerHTML = '<p class="empty">Tiada data kelas.</p>';
       return;
     }
@@ -219,6 +223,7 @@
     renderLanguageBars(filtered);
     renderTingkatanBars(periodRecords);
     renderBar(filtered);
+    renderStarDistribution(periodRecords, state.selectedClass, state.selectedTingkatan);
     renderClassHeatmap(filtered);
   }
 
@@ -234,6 +239,10 @@
     }
     if (el.barTitle) {
       el.barTitle.textContent = `Jumlah Bacaan Murid Tertinggi sehingga ${recentMonthText} (${classText})`;
+    }
+    if (el.starDistTitle) {
+      const starScopeText = classText === "Semua Kelas" ? "Semua Murid" : `Murid ${classText}`;
+      el.starDistTitle.textContent = `Taburan Bintang 1-5 (${starScopeText} / ${periodText})`;
     }
     if (el.heatmapTitle) {
       el.heatmapTitle.textContent = `Analisis Jumlah Bacaan Mengikut Kelas (${tingkatanText} / ${periodText})`;
@@ -261,7 +270,7 @@
   function renderEmptySummary(isAllClasses) {
     setSummaryHeaders(isAllClasses);
     if (el.summaryTbody) {
-      el.summaryTbody.innerHTML = '<tr><td colspan="11" class="empty">Tiada data ringkasan.</td></tr>';
+      el.summaryTbody.innerHTML = '<tr><td colspan="12" class="empty">Tiada data ringkasan.</td></tr>';
     }
   }
 
@@ -282,6 +291,7 @@
         <th>Lain-lain Bahasa</th>
         <th>AINS (Sepanjang Tahun)</th>
         <th>JUMLAH BACAAN</th>
+        <th>Bintang</th>
       `;
       return;
     }
@@ -298,6 +308,7 @@
       <th>Lain-lain Bahasa</th>
       <th>AINS (Sepanjang Tahun)</th>
       <th>JUMLAH BACAAN</th>
+      <th>Bintang</th>
     `;
   }
 
@@ -386,6 +397,7 @@
         <td>${row.lain_lain_bahasa}</td>
         <td>${row.ains_sepanjang_tahun}</td>
         <td>${row.jumlah_bacaan}</td>
+        <td>${renderBintang(row.jumlah_bacaan)}</td>
       </tr>`
       )
       .join("") +
@@ -402,6 +414,7 @@
         <td><strong>${total.lain_lain_bahasa}</strong></td>
         <td><strong>${total.ains_sepanjang_tahun}</strong></td>
         <td><strong>${total.jumlah_bacaan}</strong></td>
+        <td><strong>${renderBintang(total.jumlah_bacaan)}</strong></td>
       </tr>`;
   }
 
@@ -501,7 +514,7 @@
 
     const rows = [...byStudent.values()].sort((a, b) => a.nama.localeCompare(b.nama, "ms"));
     if (!rows.length) {
-      el.summaryTbody.innerHTML = '<tr><td colspan="11" class="empty">Tiada data ringkasan.</td></tr>';
+      el.summaryTbody.innerHTML = '<tr><td colspan="12" class="empty">Tiada data ringkasan.</td></tr>';
       return;
     }
 
@@ -544,6 +557,7 @@
         <td>${row.lain_lain_bahasa}</td>
         <td>${row.ains_sepanjang_tahun}</td>
         <td>${row.jumlah_bacaan}</td>
+        <td>${renderBintang(row.jumlah_bacaan)}</td>
       </tr>`
       )
       .join("") +
@@ -560,7 +574,167 @@
         <td><strong>${total.lain_lain_bahasa}</strong></td>
         <td><strong>${total.ains_sepanjang_tahun}</strong></td>
         <td><strong>${total.jumlah_bacaan}</strong></td>
+        <td><strong>${renderBintang(total.jumlah_bacaan)}</strong></td>
       </tr>`;
+  }
+
+  function getBintangCount(jumlahBacaan) {
+    const jumlah = Math.max(0, Math.trunc(Number(jumlahBacaan) || 0));
+    if (jumlah >= 120 && jumlah <= 239) {
+      return 1;
+    }
+    if (jumlah >= 240 && jumlah <= 359) {
+      return 2;
+    }
+    if (jumlah >= 360 && jumlah <= 479) {
+      return 3;
+    }
+    if (jumlah >= 480 && jumlah <= 599) {
+      return 4;
+    }
+    if (jumlah >= 600) {
+      return 5;
+    }
+    return 0;
+  }
+
+  function renderBintang(jumlahBacaan) {
+    const count = getBintangCount(jumlahBacaan);
+    return count > 0 ? "⭐".repeat(count) : "-";
+  }
+
+  function renderStarDistribution(periodRecords, selectedClass, selectedTingkatan) {
+    if (!el.starDistWrap) {
+      return;
+    }
+
+    const students = buildStudentTotalsForStarChart(periodRecords, selectedClass, selectedTingkatan);
+    const totalStudents = students.length;
+    if (!totalStudents) {
+      el.starDistWrap.innerHTML = '<p class="empty">Tiada murid untuk kiraan bintang.</p>';
+      return;
+    }
+
+    const buckets = [1, 2, 3, 4, 5].map((star) => ({
+      star,
+      count: 0,
+      percent: 0,
+    }));
+    students.forEach((row) => {
+      const star = getBintangCount(row.jumlah_bacaan);
+      if (star >= 1 && star <= 5) {
+        buckets[star - 1].count += 1;
+      }
+    });
+    buckets.forEach((row) => {
+      row.percent = totalStudents ? (row.count / totalStudents) * 100 : 0;
+    });
+
+    const maxCount = Math.max(...buckets.map((row) => row.count), 1);
+    const width = 520;
+    const height = 280;
+    const left = 52;
+    const right = 20;
+    const top = 18;
+    const bottom = 58;
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const barColors = ["#16a34a", "#0ea5e9", "#f59e0b", "#f97316", "#8b5cf6"];
+    const barWidth = Math.floor((plotWidth - 50) / buckets.length);
+    const gap = Math.max(
+      8,
+      Math.floor((plotWidth - barWidth * buckets.length) / (buckets.length - 1))
+    );
+
+    const bars = buckets
+      .map((row, index) => {
+        const h = maxCount ? (row.count / maxCount) * plotHeight : 0;
+        const x = left + index * (barWidth + gap);
+        const y = top + (plotHeight - h);
+        const labelY = h > 0 ? y - 6 : top + plotHeight - 6;
+        return `
+          <rect x="${x}" y="${y}" width="${barWidth}" height="${h}" fill="${barColors[index]}" rx="4" ry="4"></rect>
+          <text x="${x + barWidth / 2}" y="${Math.max(14, labelY)}" text-anchor="middle" class="axis-label">${row.count}</text>
+          <text x="${x + barWidth / 2}" y="${top + plotHeight + 16}" text-anchor="middle" class="axis-label">${row.percent.toFixed(1)}%</text>
+          <text x="${x + barWidth / 2}" y="${top + plotHeight + 34}" text-anchor="middle" class="axis-label">${row.star}⭐</text>
+        `;
+      })
+      .join("");
+
+    el.starDistWrap.innerHTML = `
+      <p class="chart-note">Jumlah murid diambil kira: <strong>${totalStudents}</strong> (termasuk 0 bintang).</p>
+      <div class="bar-scroll">
+        <svg viewBox="0 0 ${width} ${height}" class="bar-svg" aria-label="Carta taburan bintang 1 hingga 5">
+          <line x1="${left}" y1="${top + plotHeight}" x2="${width - right}" y2="${top + plotHeight}" stroke="#9bb7bf" />
+          ${bars}
+        </svg>
+      </div>
+    `;
+  }
+
+  function buildStudentTotalsForStarChart(periodRecords, selectedClass, selectedTingkatan) {
+    const byStudent = new Map();
+    const isAllClasses = selectedClass === "__all__";
+    const isAllTingkatan = selectedTingkatan === "__all__";
+
+    state.students.forEach((row) => {
+      const kelas = String(row.kelas || "").trim();
+      const nama = String(row.nama || "").trim();
+      if (!kelas || !nama) {
+        return;
+      }
+      if (!isAllTingkatan && classToTingkatan(kelas) !== selectedTingkatan) {
+        return;
+      }
+      if (!isAllClasses && kelas !== selectedClass) {
+        return;
+      }
+      const noKad = normalizeKeyText(row.no_kad_pengenalan);
+      const key = noKad ? `ic:${noKad}` : `nm:${normalizeKeyText(nama)}|k:${kelas.toLowerCase()}`;
+      if (!byStudent.has(key)) {
+        byStudent.set(key, {
+          jumlah_bacaan: 0,
+        });
+      }
+    });
+
+    (Array.isArray(periodRecords) ? periodRecords : []).forEach((row) => {
+      const kelas = String(row.kelas || "").trim();
+      if (!kelas) {
+        return;
+      }
+      if (!isAllTingkatan && classToTingkatan(kelas) !== selectedTingkatan) {
+        return;
+      }
+      if (!isAllClasses && kelas !== selectedClass) {
+        return;
+      }
+
+      const noKad = normalizeKeyText(row.no_kad_pengenalan);
+      const nama = normalizeKeyText(row.nama);
+      const icKey = noKad ? `ic:${noKad}` : "";
+      const nameKey = nama ? `nm:${nama}|k:${kelas.toLowerCase()}` : "";
+      let key = "";
+      if (icKey && byStudent.has(icKey)) {
+        key = icKey;
+      } else if (nameKey && byStudent.has(nameKey)) {
+        key = nameKey;
+      } else if (icKey) {
+        key = icKey;
+      } else if (nameKey) {
+        key = nameKey;
+      }
+      if (!key) {
+        return;
+      }
+      if (!byStudent.has(key)) {
+        byStudent.set(key, { jumlah_bacaan: 0 });
+      }
+      const slot = byStudent.get(key);
+      slot.jumlah_bacaan += Math.max(0, Math.trunc(computeJumlahBacaan(row)));
+    });
+
+    return [...byStudent.values()];
   }
 
   function computeJumlahBacaan(row) {
