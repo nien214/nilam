@@ -919,12 +919,13 @@
       mergeStudentsIntoNamelist(parsed.students);
       let syncNote = "";
       try {
-        await upsertImportedRecordsToSupabase(parsed.records);
         await upsertStudentsToSupabase(parsed.students);
+        await upsertImportedRecordsToSupabase(parsed.records);
         syncNote = " Data juga disimpan ke Supabase.";
       } catch (syncError) {
         console.error(syncError);
-        syncNote = " Simpanan Supabase gagal, tetapi data telah disimpan ke local.";
+        const detail = String(syncError?.message || syncError || "").slice(0, 220);
+        syncNote = ` Simpanan Supabase gagal (${detail}), tetapi data telah disimpan ke local.`;
       }
 
       setStatus(
