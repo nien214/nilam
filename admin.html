@@ -35,6 +35,7 @@
       <h2>Panel Admin</h2>
       <div class="admin-actions">
         <button id="manageStudentsBtn" type="button" class="save-btn admin-action-btn">Pengurusan Senarai Murid</button>
+        <button id="updateNilamBtn" type="button" class="save-btn admin-action-btn">Kemas Kini Data Nilam</button>
 
         <button id="compareNamelistBtn" type="button" class="save-btn admin-action-btn">Banding Senarai Nama</button>
         <input id="compareFileInput" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
@@ -133,6 +134,53 @@
       </div>
     </section>
 
+    <section id="nilamUpdateSection" class="card" hidden>
+      <h2>Kemas Kini Data Nilam</h2>
+      <p class="warning-text">Semak jumlah gabungan rekod guru mengikut Tahun + Bulan + Kelas, kemudian simpan sebagai versi akhir untuk Statistik.</p>
+      <div class="manage-controls nilam-update-controls">
+        <button id="toggleAdminPanelBtnUpdate" type="button" class="save-btn secondary-btn">Tunjuk Panel Admin</button>
+        <label for="updateNilamYearInput">Tahun</label>
+        <input id="updateNilamYearInput" type="number" min="2000" max="2100" step="1" inputmode="numeric">
+        <label for="updateNilamMonthSelect">Bulan</label>
+        <select id="updateNilamMonthSelect"></select>
+        <label for="updateNilamClassSelect">Kelas</label>
+        <select id="updateNilamClassSelect">
+          <option value="">Pilih kelas</option>
+        </select>
+        <button id="loadNilamUpdateBtn" type="button" class="save-btn">Muatkan Data</button>
+      </div>
+      <div class="table-wrap">
+        <table id="nilamUpdateTable" class="nilam-update-table">
+          <thead>
+            <tr>
+              <th>Bil</th>
+              <th>Nama</th>
+              <th>Kelas</th>
+              <th>Bahan<br>Digital</th>
+              <th>Bahan Bukan<br>Buku</th>
+              <th>Fiksyen</th>
+              <th>Bukan<br>Fiksyen</th>
+              <th>Bahasa<br>Melayu</th>
+              <th>Bahasa<br>Inggeris</th>
+              <th>Lain-lain<br>Bahasa</th>
+              <th>Jumlah Bacaan<br>Bulan ini</th>
+              <th>AINS<br>(Sepanjang Tahun)</th>
+              <th>Jumlah Bacaan<br>Tahun ini</th>
+              <th>Jumlah Bacaan<br>Sejak Per/T1</th>
+            </tr>
+          </thead>
+          <tbody id="nilamUpdateTbody">
+            <tr>
+              <td colspan="14" class="empty">Pilih Tahun, Bulan, dan Kelas untuk memuatkan data.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-actions">
+        <button id="saveNilamUpdateBtn" type="button" class="save-btn">Simpan Kemas Kini</button>
+      </div>
+    </section>
+
     <p id="adminStatus" role="status" aria-live="polite"></p>
   </main>
 
@@ -187,7 +235,7 @@
   <script src="students-data.js"></script>
   <script src="shared-data.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="admin.js?v=20260226i"></script>
+  <script src="admin.js?v=20260226j"></script>
   <script src="orientation-hint.js"></script>
 </body>
 </html>

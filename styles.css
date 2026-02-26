@@ -6,6 +6,7 @@
   --line: #d9e1e4;
   --accent: #127475;
   --accent-2: #0f8b8d;
+  color-scheme: light;
 }
 
 * {
@@ -249,6 +250,21 @@ input[type="date"] {
   font-size: 0.76rem;
   line-height: 1.15;
   height: 2rem;
+  color: var(--ink);
+  background-color: #fff;
+  color-scheme: light;
+}
+
+#namaPengisi {
+  color: var(--ink);
+  background-color: #fff;
+  -webkit-text-fill-color: var(--ink);
+  color-scheme: light;
+}
+
+#namaPengisi::placeholder {
+  color: #7a8a91;
+  opacity: 1;
 }
 
 .controls label {
@@ -635,6 +651,32 @@ td:nth-child(11) {
   margin-bottom: 0.6rem;
 }
 
+.nilam-update-controls {
+  align-items: flex-end;
+}
+
+.nilam-update-controls label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #244751;
+}
+
+#updateNilamYearInput {
+  width: 8.5ch;
+  min-width: 8.5ch;
+}
+
+#updateNilamMonthSelect {
+  width: 11.5ch;
+  min-width: 11.5ch;
+}
+
+#updateNilamClassSelect {
+  min-width: 12ch;
+  max-width: 18ch;
+  width: fit-content;
+}
+
 .pagination-controls {
   display: flex;
   align-items: center;
@@ -736,6 +778,63 @@ td:nth-child(11) {
 .manage-table th:nth-child(6),
 .manage-table td:nth-child(6) {
   width: 10%;
+}
+
+.nilam-update-table th,
+.nilam-update-table td {
+  font-size: 0.76rem;
+}
+
+.nilam-update-table input[type="number"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.18rem 0.24rem;
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+.nilam-update-table th:nth-child(1),
+.nilam-update-table td:nth-child(1) {
+  width: 4%;
+}
+
+.nilam-update-table th:nth-child(2),
+.nilam-update-table td:nth-child(2) {
+  width: 17%;
+}
+
+.nilam-update-table th:nth-child(3),
+.nilam-update-table td:nth-child(3) {
+  width: 7%;
+}
+
+.nilam-update-table th:nth-child(4),
+.nilam-update-table td:nth-child(4),
+.nilam-update-table th:nth-child(5),
+.nilam-update-table td:nth-child(5),
+.nilam-update-table th:nth-child(6),
+.nilam-update-table td:nth-child(6),
+.nilam-update-table th:nth-child(7),
+.nilam-update-table td:nth-child(7),
+.nilam-update-table th:nth-child(8),
+.nilam-update-table td:nth-child(8),
+.nilam-update-table th:nth-child(9),
+.nilam-update-table td:nth-child(9),
+.nilam-update-table th:nth-child(10),
+.nilam-update-table td:nth-child(10) {
+  width: 6%;
+}
+
+.nilam-update-table th:nth-child(11),
+.nilam-update-table td:nth-child(11),
+.nilam-update-table th:nth-child(12),
+.nilam-update-table td:nth-child(12),
+.nilam-update-table th:nth-child(13),
+.nilam-update-table td:nth-child(13),
+.nilam-update-table th:nth-child(14),
+.nilam-update-table td:nth-child(14) {
+  width: 7.5%;
 }
 
 .mini-btn {

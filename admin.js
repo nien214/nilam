@@ -26,6 +26,7 @@
   const state = {
     students: [],
     isManageOpen: false,
+    isNilamUpdateOpen: false,
     isPanelHiddenInManage: false,
     currentPage: 1,
     rowsPerPage: 20,
@@ -39,6 +40,10 @@
     autoSyncInFlight: false,
     autoSyncQueued: false,
     autoSyncRequireDeactivate: false,
+    nilamUpdateRows: [],
+    nilamUpdateLoadedYear: "",
+    nilamUpdateLoadedMonth: "",
+    nilamUpdateLoadedClass: "",
   };
 
   const el = {
@@ -65,8 +70,11 @@
     cancelImportDataBtn: document.getElementById("cancelImportDataBtn"),
     resetBtn: document.getElementById("resetDataBtn"),
     manageBtn: document.getElementById("manageStudentsBtn"),
+    updateNilamBtn: document.getElementById("updateNilamBtn"),
     manageSection: document.getElementById("studentManageSection"),
+    nilamUpdateSection: document.getElementById("nilamUpdateSection"),
     toggleAdminPanelBtn: document.getElementById("toggleAdminPanelBtn"),
+    toggleAdminPanelBtnUpdate: document.getElementById("toggleAdminPanelBtnUpdate"),
     rowsPerPageSelect: document.getElementById("manageRowsPerPage"),
     prevPageBtn: document.getElementById("managePrevPageBtn"),
     nextPageBtn: document.getElementById("manageNextPageBtn"),
@@ -84,6 +92,12 @@
     cancelCompareBtn: document.getElementById("cancelCompareBtn"),
     confirmCompareBtn: document.getElementById("confirmCompareBtn"),
     logoutBtn: document.getElementById("logoutBtn"),
+    nilamUpdateYearInput: document.getElementById("updateNilamYearInput"),
+    nilamUpdateMonthSelect: document.getElementById("updateNilamMonthSelect"),
+    nilamUpdateClassSelect: document.getElementById("updateNilamClassSelect"),
+    nilamUpdateLoadBtn: document.getElementById("loadNilamUpdateBtn"),
+    nilamUpdateSaveBtn: document.getElementById("saveNilamUpdateBtn"),
+    nilamUpdateTbody: document.getElementById("nilamUpdateTbody"),
     status: document.getElementById("adminStatus"),
   };
 
@@ -91,6 +105,8 @@
 
   function init() {
     initImportMonthOptions();
+    initNilamUpdateMonthOptions();
+    initNilamUpdateFilters();
     if (el.rowsPerPageSelect) {
       el.rowsPerPageSelect.value = String(state.rowsPerPage);
     }
@@ -141,8 +157,14 @@
     el.cancelImportDataBtn.addEventListener("click", closeImportDataDialog);
     el.resetBtn.addEventListener("click", resetAllData);
     el.manageBtn.addEventListener("click", toggleManageStudents);
+    if (el.updateNilamBtn) {
+      el.updateNilamBtn.addEventListener("click", toggleNilamUpdate);
+    }
     if (el.toggleAdminPanelBtn) {
       el.toggleAdminPanelBtn.addEventListener("click", toggleAdminPanelVisibility);
+    }
+    if (el.toggleAdminPanelBtnUpdate) {
+      el.toggleAdminPanelBtnUpdate.addEventListener("click", toggleAdminPanelVisibility);
     }
     if (el.rowsPerPageSelect) {
       el.rowsPerPageSelect.addEventListener("change", handleRowsPerPageChange);
@@ -179,6 +201,15 @@
     }
     if (el.confirmCompareBtn) {
       el.confirmCompareBtn.addEventListener("click", confirmCompare);
+    }
+    if (el.nilamUpdateLoadBtn) {
+      el.nilamUpdateLoadBtn.addEventListener("click", handleLoadNilamUpdateData);
+    }
+    if (el.nilamUpdateSaveBtn) {
+      el.nilamUpdateSaveBtn.addEventListener("click", saveNilamUpdateData);
+    }
+    if (el.nilamUpdateTbody) {
+      el.nilamUpdateTbody.addEventListener("input", handleNilamUpdateTableInput);
     }
     el.logoutBtn.addEventListener("click", logout);
   }
@@ -274,9 +305,13 @@
     if (el.manageSection) {
       el.manageSection.hidden = true;
     }
+    if (el.nilamUpdateSection) {
+      el.nilamUpdateSection.hidden = true;
+    }
     state.isPanelHiddenInManage = false;
     updateAdminPanelToggleLabel();
     state.isManageOpen = false;
+    state.isNilamUpdateOpen = false;
   }
 
   function initInfoBadges() {
@@ -324,12 +359,106 @@
     state.isManageOpen = !state.isManageOpen;
     el.manageSection.hidden = !state.isManageOpen;
     if (state.isManageOpen) {
+      state.isNilamUpdateOpen = false;
+      if (el.nilamUpdateSection) {
+        el.nilamUpdateSection.hidden = true;
+      }
       setAdminPanelHidden(true);
       loadStudentsForManage();
       setStatus("Pengurusan senarai murid dibuka.");
       return;
     }
     setAdminPanelHidden(false);
+  }
+
+  function toggleNilamUpdate() {
+    state.isNilamUpdateOpen = !state.isNilamUpdateOpen;
+    if (el.nilamUpdateSection) {
+      el.nilamUpdateSection.hidden = !state.isNilamUpdateOpen;
+    }
+    if (state.isNilamUpdateOpen) {
+      state.isManageOpen = false;
+      if (el.manageSection) {
+        el.manageSection.hidden = true;
+      }
+      setAdminPanelHidden(true);
+      initNilamUpdateFilters();
+      renderNilamUpdateEmpty("Pilih Tahun, Bulan, dan Kelas untuk memuatkan data.");
+      setStatus("Kemas Kini Data Nilam dibuka.");
+      return;
+    }
+    setAdminPanelHidden(false);
+  }
+
+  function initNilamUpdateMonthOptions() {
+    if (!el.nilamUpdateMonthSelect) {
+      return;
+    }
+    el.nilamUpdateMonthSelect.innerHTML = "";
+    MONTHS.forEach((month) => {
+      const option = document.createElement("option");
+      option.value = month;
+      option.textContent = month;
+      el.nilamUpdateMonthSelect.appendChild(option);
+    });
+  }
+
+  function initNilamUpdateFilters() {
+    const now = new Date();
+    if (el.nilamUpdateYearInput) {
+      const year = String(el.nilamUpdateYearInput.value || "").trim();
+      if (!/^\d{4}$/.test(year)) {
+        el.nilamUpdateYearInput.value = String(now.getFullYear());
+      }
+    }
+    if (el.nilamUpdateMonthSelect && !normalizeMonth(el.nilamUpdateMonthSelect.value)) {
+      el.nilamUpdateMonthSelect.value = MONTHS[now.getMonth()];
+    }
+    populateNilamUpdateClassOptions();
+  }
+
+  function populateNilamUpdateClassOptions() {
+    if (!el.nilamUpdateClassSelect) {
+      return;
+    }
+    const previous = String(el.nilamUpdateClassSelect.value || "").trim();
+    const classSet = new Set();
+    getCurrentNamelist()
+      .map(normalizeStudentRow)
+      .forEach((row) => {
+        const kelas = String(row.kelas || "").trim();
+        if (kelas) {
+          classSet.add(kelas);
+        }
+      });
+    readAllLocalRecords().forEach((row) => {
+      const kelas = String(row?.kelas || "").trim();
+      if (kelas) {
+        classSet.add(kelas);
+      }
+    });
+    const classes = [...classSet].sort((a, b) => a.localeCompare(b, "ms"));
+    el.nilamUpdateClassSelect.innerHTML = '<option value="">Pilih kelas</option>';
+    classes.forEach((kelas) => {
+      const option = document.createElement("option");
+      option.value = kelas;
+      option.textContent = kelas;
+      el.nilamUpdateClassSelect.appendChild(option);
+    });
+    if (previous && classSet.has(previous)) {
+      el.nilamUpdateClassSelect.value = previous;
+    }
+  }
+
+  function renderNilamUpdateEmpty(message) {
+    if (!el.nilamUpdateTbody) {
+      return;
+    }
+    el.nilamUpdateTbody.innerHTML = `
+      <tr>
+        <td colspan="14" class="empty">${escapeAttr(message || "Tiada data.")}</td>
+      </tr>
+    `;
   }
 
   function loadStudentsForManage() {
@@ -529,12 +658,15 @@
   }
 
   function updateAdminPanelToggleLabel() {
-    if (!el.toggleAdminPanelBtn) {
-      return;
-    }
-    el.toggleAdminPanelBtn.textContent = state.isPanelHiddenInManage
+    const nextLabel = state.isPanelHiddenInManage
       ? "Tunjuk Panel Admin"
       : "Sembunyi Panel Admin";
+    if (el.toggleAdminPanelBtn) {
+      el.toggleAdminPanelBtn.textContent = nextLabel;
+    }
+    if (el.toggleAdminPanelBtnUpdate) {
+      el.toggleAdminPanelBtnUpdate.textContent = nextLabel;
+    }
   }
 
   function addStudentRow() {
@@ -1038,6 +1170,587 @@
       state.pendingImportMonth = "";
       state.pendingImportType = "";
       event.target.value = "";
+    }
+  }
+
+  async function handleLoadNilamUpdateData() {
+    await loadNilamUpdateDataSelection();
+  }
+
+  async function loadNilamUpdateDataSelection(options = {}) {
+    try {
+      const year = String(el.nilamUpdateYearInput ? el.nilamUpdateYearInput.value : "").trim();
+      if (!/^\d{4}$/.test(year)) {
+        throw new Error("Tahun tidak sah. Gunakan format 4 digit, contoh 2026.");
+      }
+      const month = normalizeMonth(el.nilamUpdateMonthSelect ? el.nilamUpdateMonthSelect.value : "");
+      if (!month) {
+        throw new Error("Bulan tidak sah. Sila pilih bulan daripada senarai.");
+      }
+      populateNilamUpdateClassOptions();
+      const kelas = String(el.nilamUpdateClassSelect ? el.nilamUpdateClassSelect.value : "").trim();
+      if (!kelas) {
+        throw new Error("Sila pilih kelas dahulu.");
+      }
+
+      const localRecords = readAllLocalRecords();
+      let supabaseRecords = [];
+      let cloudWarning = "";
+      const config = window.NILAM_CONFIG || {};
+      if (config.supabaseUrl && config.supabaseAnonKey) {
+        try {
+          supabaseRecords = await fetchAllSupabaseRecordsForAdmin(config);
+        } catch (error) {
+          console.error(error);
+          cloudWarning = ` Muat cloud gagal (${String(error?.message || error || "").slice(0, 160)}), guna data local.`;
+        }
+      }
+      const allRecords = mergeRecordsByLatestSession(supabaseRecords, localRecords);
+      const rows = buildNilamUpdateRows(allRecords, year, month, kelas);
+
+      state.nilamUpdateRows = rows;
+      state.nilamUpdateLoadedYear = year;
+      state.nilamUpdateLoadedMonth = month;
+      state.nilamUpdateLoadedClass = kelas;
+      renderNilamUpdateTable();
+
+      if (!options.silentStatus) {
+        setStatus(`Data dimuatkan: ${rows.length} murid untuk ${year} ${month} ${kelas}.${cloudWarning}`);
+      }
+    } catch (error) {
+      const message = error?.message || "Gagal memuatkan data Kemas Kini NILAM.";
+      setStatus(message, true);
+      renderNilamUpdateEmpty(message);
+    }
+  }
+
+  function buildNilamUpdateRows(allRecords, year, month, kelas) {
+    const records = Array.isArray(allRecords) ? allRecords : [];
+    const classStudents = getCurrentNamelist()
+      .map(normalizeStudentRow)
+      .filter((row) => String(row.kelas || "").trim() === kelas);
+
+    const byKey = new Map();
+    classStudents.forEach((student) => {
+      const key = getStudentAggregateKey(student, kelas);
+      if (!key || byKey.has(key)) {
+        return;
+      }
+      byKey.set(key, emptyNilamUpdateRow(student, key, kelas));
+    });
+
+    records.forEach((row) => {
+      if (String(row?.tahun || "").trim() !== year) {
+        return;
+      }
+      if (String(row?.bulan || "").trim() !== month) {
+        return;
+      }
+      if (String(row?.kelas || "").trim() !== kelas) {
+        return;
+      }
+      if (isPureAinsRecord(row)) {
+        return;
+      }
+      const key = getStudentAggregateKey(row, kelas);
+      if (!key) {
+        return;
+      }
+      if (!byKey.has(key)) {
+        byKey.set(key, emptyNilamUpdateRow(row, key, kelas));
+      }
+      const slot = byKey.get(key);
+      slot.no_kad_pengenalan = normalizeNoKad(slot.no_kad_pengenalan) || normalizeNoKad(row.no_kad_pengenalan);
+      slot.nama = slot.nama || String(row.nama || "").trim();
+      slot.kelas = slot.kelas || String(row.kelas || "").trim() || kelas;
+      slot.bahan_digital += toInt999(row.bahan_digital);
+      slot.bahan_bukan_buku += toInt999(row.bahan_bukan_buku);
+      slot.fiksyen += toInt999(row.fiksyen);
+      slot.bukan_fiksyen += toInt999(row.bukan_fiksyen);
+      slot.bahasa_melayu += toInt999(row.bahasa_melayu);
+      slot.bahasa_inggeris += toInt999(row.bahasa_inggeris);
+      slot.lain_lain_bahasa += toInt999(row.lain_lain_bahasa);
+    });
+
+    const yearRecords = records.filter((row) => String(row?.tahun || "").trim() === year);
+    const yearMaterialsByKey = computeMaterialsTotalsByKey(yearRecords);
+    const allMaterialsByKey = computeMaterialsTotalsByKey(records);
+    const yearAinsByKey = computeYearAinsMaxByKey(yearRecords);
+    const allTimeAinsByKey = computeAllTimeAinsSumByKey(records);
+
+    const rows = [...byKey.values()].sort((a, b) =>
+      String(a.nama || "").localeCompare(String(b.nama || ""), "ms", { sensitivity: "base" })
+    );
+
+    rows.forEach((row, index) => {
+      row.bil = index + 1;
+      recomputeNilamUpdateRow(row);
+      row.ains_sepanjang_tahun = yearAinsByKey.get(row.student_key) || 0;
+      row.ains_all_time = allTimeAinsByKey.get(row.student_key) || 0;
+      row.year_materials_base = Math.max(0, (yearMaterialsByKey.get(row.student_key) || 0) - row.jumlah_aktiviti);
+      row.all_materials_base = Math.max(0, (allMaterialsByKey.get(row.student_key) || 0) - row.jumlah_aktiviti);
+      row.jumlah_tahun = row.year_materials_base + row.jumlah_aktiviti + row.ains_sepanjang_tahun;
+      row.jumlah_all_time = row.all_materials_base + row.jumlah_aktiviti + row.ains_all_time;
+    });
+
+    return rows;
+  }
+
+  function emptyNilamUpdateRow(source, key, kelasFallback) {
+    return {
+      bil: 0,
+      student_key: key,
+      no_kad_pengenalan: normalizeNoKad(source?.no_kad_pengenalan),
+      nama: String(source?.nama || "").trim(),
+      kelas: String(source?.kelas || "").trim() || kelasFallback,
+      bahan_digital: 0,
+      bahan_bukan_buku: 0,
+      fiksyen: 0,
+      bukan_fiksyen: 0,
+      bahasa_melayu: 0,
+      bahasa_inggeris: 0,
+      lain_lain_bahasa: 0,
+      jumlah_aktiviti: 0,
+      ains_sepanjang_tahun: 0,
+      ains_all_time: 0,
+      year_materials_base: 0,
+      all_materials_base: 0,
+      jumlah_tahun: 0,
+      jumlah_all_time: 0,
+    };
+  }
+
+  function getStudentAggregateKey(row, kelasFallback) {
+    const noKad = normalizeNoKad(row?.no_kad_pengenalan);
+    if (noKad) {
+      return `ic:${noKad}`;
+    }
+    const nama = String(row?.nama || "").trim().toLowerCase();
+    const kelas = String(row?.kelas || "").trim().toLowerCase() || String(kelasFallback || "").trim().toLowerCase();
+    if (!nama || !kelas) {
+      return "";
+    }
+    return `nm:${nama}|k:${kelas}`;
+  }
+
+  function computeMaterialsTotalsByKey(records) {
+    const map = new Map();
+    (Array.isArray(records) ? records : []).forEach((row) => {
+      const key = getStudentAggregateKey(row);
+      if (!key) {
+        return;
+      }
+      map.set(key, (map.get(key) || 0) + getMaterialsTotalWithoutAins(row));
+    });
+    return map;
+  }
+
+  function computeYearAinsMaxByKey(records) {
+    const map = new Map();
+    (Array.isArray(records) ? records : []).forEach((row) => {
+      const key = getStudentAggregateKey(row);
+      if (!key) {
+        return;
+      }
+      const next = toInt999(row.ains);
+      if (!map.has(key) || next > map.get(key)) {
+        map.set(key, next);
+      }
+    });
+    return map;
+  }
+
+  function computeAllTimeAinsSumByKey(records) {
+    const byStudentYear = new Map();
+    (Array.isArray(records) ? records : []).forEach((row) => {
+      const key = getStudentAggregateKey(row);
+      const year = String(row?.tahun || "").trim();
+      if (!key || !year) {
+        return;
+      }
+      const yearKey = `${key}|${year}`;
+      const next = toInt999(row.ains);
+      if (!byStudentYear.has(yearKey) || next > byStudentYear.get(yearKey)) {
+        byStudentYear.set(yearKey, next);
+      }
+    });
+    const totals = new Map();
+    byStudentYear.forEach((ains, yearKey) => {
+      const sep = yearKey.lastIndexOf("|");
+      const studentKey = sep >= 0 ? yearKey.slice(0, sep) : yearKey;
+      totals.set(studentKey, (totals.get(studentKey) || 0) + ains);
+    });
+    return totals;
+  }
+
+  function getMaterialsTotalWithoutAins(row) {
+    return (
+      toInt999(row?.bahan_digital) +
+      toInt999(row?.bahan_bukan_buku) +
+      toInt999(row?.fiksyen) +
+      toInt999(row?.bukan_fiksyen)
+    );
+  }
+
+  function recomputeNilamUpdateRow(row) {
+    row.bahan_digital = toInt999(row.bahan_digital);
+    row.bahan_bukan_buku = toInt999(row.bahan_bukan_buku);
+    row.fiksyen = toInt999(row.fiksyen);
+    row.bukan_fiksyen = toInt999(row.bukan_fiksyen);
+    row.bahasa_melayu = toInt999(row.bahasa_melayu);
+    row.bahasa_inggeris = toInt999(row.bahasa_inggeris);
+    row.lain_lain_bahasa = toInt999(row.lain_lain_bahasa);
+    row.jumlah_aktiviti = getMaterialsTotalWithoutAins(row);
+    row.jumlah_tahun = row.year_materials_base + row.jumlah_aktiviti + row.ains_sepanjang_tahun;
+    row.jumlah_all_time = row.all_materials_base + row.jumlah_aktiviti + row.ains_all_time;
+  }
+
+  function renderNilamUpdateTable() {
+    if (!el.nilamUpdateTbody) {
+      return;
+    }
+    const rows = Array.isArray(state.nilamUpdateRows) ? state.nilamUpdateRows : [];
+    if (!rows.length) {
+      renderNilamUpdateEmpty("Tiada murid dijumpai untuk kelas dipilih.");
+      return;
+    }
+
+    el.nilamUpdateTbody.innerHTML = rows
+      .map((row, index) => `
+        <tr data-row-index="${index}">
+          <td>${row.bil}</td>
+          <td><span class="cell-static cell-name">${escapeAttr(row.nama)}</span></td>
+          <td><span class="cell-static">${escapeAttr(row.kelas)}</span></td>
+          <td><input type="number" min="0" max="999" step="1" data-row-index="${index}" data-field="bahan_digital" value="${row.bahan_digital}"></td>
+          <td><input type="number" min="0" max="999" step="1" data-row-index="${index}" data-field="bahan_bukan_buku" value="${row.bahan_bukan_buku}"></td>
+          <td><input type="number" min="0" max="999" step="1" data-row-index="${index}" data-field="fiksyen" value="${row.fiksyen}"></td>
+          <td><input type="number" min="0" max="999" step="1" data-row-index="${index}" data-field="bukan_fiksyen" value="${row.bukan_fiksyen}"></td>
+          <td><input type="number" min="0" max="999" step="1" data-row-index="${index}" data-field="bahasa_melayu" value="${row.bahasa_melayu}"></td>
+          <td><input type="number" min="0" max="999" step="1" data-row-index="${index}" data-field="bahasa_inggeris" value="${row.bahasa_inggeris}"></td>
+          <td><input type="number" min="0" max="999" step="1" data-row-index="${index}" data-field="lain_lain_bahasa" value="${row.lain_lain_bahasa}"></td>
+          <td><span class="cell-total" data-col="jumlah_aktiviti">${row.jumlah_aktiviti}</span></td>
+          <td><span class="cell-total" data-col="ains_sepanjang_tahun">${row.ains_sepanjang_tahun}</span></td>
+          <td><span class="cell-total" data-col="jumlah_tahun">${row.jumlah_tahun}</span></td>
+          <td><span class="cell-total" data-col="jumlah_all_time">${row.jumlah_all_time}</span></td>
+        </tr>
+      `)
+      .join("");
+  }
+
+  function handleNilamUpdateTableInput(event) {
+    const input = event.target.closest("input[data-row-index][data-field]");
+    if (!input) {
+      return;
+    }
+    const rowIndex = Number(input.dataset.rowIndex);
+    const field = String(input.dataset.field || "").trim();
+    if (
+      !Number.isInteger(rowIndex) ||
+      rowIndex < 0 ||
+      rowIndex >= state.nilamUpdateRows.length ||
+      !field
+    ) {
+      return;
+    }
+    const row = state.nilamUpdateRows[rowIndex];
+    row[field] = toInt999(input.value);
+    input.value = String(row[field]);
+    recomputeNilamUpdateRow(row);
+    const tr = input.closest("tr");
+    if (!tr) {
+      return;
+    }
+    const monthCell = tr.querySelector('[data-col="jumlah_aktiviti"]');
+    const yearCell = tr.querySelector('[data-col="jumlah_tahun"]');
+    const allTimeCell = tr.querySelector('[data-col="jumlah_all_time"]');
+    if (monthCell) {
+      monthCell.textContent = String(row.jumlah_aktiviti);
+    }
+    if (yearCell) {
+      yearCell.textContent = String(row.jumlah_tahun);
+    }
+    if (allTimeCell) {
+      allTimeCell.textContent = String(row.jumlah_all_time);
+    }
+  }
+
+  function isPureAinsRecord(row) {
+    const ains = toInt999(row?.ains);
+    const nonAinsTotal =
+      getMaterialsTotalWithoutAins(row) +
+      toInt999(row?.bahasa_melayu) +
+      toInt999(row?.bahasa_inggeris) +
+      toInt999(row?.lain_lain_bahasa);
+    return ains > 0 && nonAinsTotal === 0;
+  }
+
+  function mergeRecordsByLatestSession(supabaseRecords, localRecords) {
+    const map = new Map();
+    let sequence = 0;
+    const put = (row) => {
+      const key = recordSessionKey(row);
+      if (!key) {
+        return;
+      }
+      sequence += 1;
+      const nextTs = parseTimestamp(row?.updated_at_client);
+      const current = map.get(key);
+      if (!current || nextTs > current.ts || (nextTs === current.ts && sequence >= current.seq)) {
+        map.set(key, { row, ts: nextTs, seq: sequence });
+      }
+    };
+    (Array.isArray(supabaseRecords) ? supabaseRecords : []).forEach(put);
+    (Array.isArray(localRecords) ? localRecords : []).forEach(put);
+    return [...map.values()].map((entry) => entry.row);
+  }
+
+  async function fetchAllSupabaseRecordsForAdmin(config) {
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return [];
+    }
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const params = new URLSearchParams({
+      select:
+        "id,tahun,bulan,tarikh,nama_pengisi,guru,bil,no_kad_pengenalan,nama,kelas,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
+      limit: "50000",
+      order: "updated_at_client.desc",
+    });
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Ralat muat rekod Supabase (${response.status}): ${detail}`);
+    }
+    const rows = await response.json();
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+    const normalized = [];
+    rows.forEach((row) => {
+      const record = normalizeImportedRecord(row, "");
+      if (record) {
+        normalized.push(record);
+      }
+    });
+    return normalized;
+  }
+
+  function hasAnyNilamInput(row) {
+    return (
+      toInt999(row?.bahan_digital) > 0 ||
+      toInt999(row?.bahan_bukan_buku) > 0 ||
+      toInt999(row?.fiksyen) > 0 ||
+      toInt999(row?.bukan_fiksyen) > 0 ||
+      toInt999(row?.bahasa_melayu) > 0 ||
+      toInt999(row?.bahasa_inggeris) > 0 ||
+      toInt999(row?.lain_lain_bahasa) > 0
+    );
+  }
+
+  function isTargetPeriodClass(row, year, month, kelas) {
+    return (
+      String(row?.tahun || "").trim() === String(year || "").trim() &&
+      String(row?.bulan || "").trim() === String(month || "").trim() &&
+      String(row?.kelas || "").trim() === String(kelas || "").trim()
+    );
+  }
+
+  async function saveNilamUpdateData() {
+    try {
+      const year = String(el.nilamUpdateYearInput ? el.nilamUpdateYearInput.value : "").trim();
+      const month = normalizeMonth(el.nilamUpdateMonthSelect ? el.nilamUpdateMonthSelect.value : "");
+      const kelas = String(el.nilamUpdateClassSelect ? el.nilamUpdateClassSelect.value : "").trim();
+      if (!/^\d{4}$/.test(year) || !month || !kelas) {
+        throw new Error("Sila pilih Tahun, Bulan, dan Kelas yang sah.");
+      }
+      if (
+        year !== state.nilamUpdateLoadedYear ||
+        month !== state.nilamUpdateLoadedMonth ||
+        kelas !== state.nilamUpdateLoadedClass
+      ) {
+        throw new Error("Penapis telah berubah. Klik Muatkan Data dahulu sebelum simpan.");
+      }
+
+      const nowIso = new Date().toISOString();
+      const tarikh = defaultTarikhForPeriod(year, month);
+      const rowsForSave = state.nilamUpdateRows
+        .map((row) => ({ ...row }))
+        .filter((row) => hasAnyNilamInput(row));
+      rowsForSave.sort((a, b) =>
+        String(a.nama || "").localeCompare(String(b.nama || ""), "ms", { sensitivity: "base" })
+      );
+
+      const overrideRecords = rowsForSave.map((row, index) => {
+        const safeNoKad = normalizeNoKad(row.no_kad_pengenalan) || syntheticNoKad(row);
+        const bahanDigital = toInt999(row.bahan_digital);
+        const bahanBukanBuku = toInt999(row.bahan_bukan_buku);
+        const fiksyen = toInt999(row.fiksyen);
+        const bukanFiksyen = toInt999(row.bukan_fiksyen);
+        const bahasaMelayu = toInt999(row.bahasa_melayu);
+        const bahasaInggeris = toInt999(row.bahasa_inggeris);
+        const lainLainBahasa = toInt999(row.lain_lain_bahasa);
+        return {
+          tahun: year,
+          bulan: month,
+          tarikh,
+          nama_pengisi: "ADMIN_OVERRIDE",
+          guru: "Nilam",
+          bil: index + 1,
+          no_kad_pengenalan: safeNoKad,
+          nama: String(row.nama || "").trim(),
+          kelas: String(row.kelas || "").trim() || kelas,
+          bahan_digital: bahanDigital,
+          bahan_bukan_buku: bahanBukanBuku,
+          fiksyen,
+          bukan_fiksyen: bukanFiksyen,
+          ains: 0,
+          bahasa_melayu: bahasaMelayu,
+          bahasa_inggeris: bahasaInggeris,
+          lain_lain_bahasa: lainLainBahasa,
+          jumlah_aktiviti: bahanDigital + bahanBukanBuku + fiksyen + bukanFiksyen,
+          updated_at_client: nowIso,
+        };
+      });
+
+      const localRecords = readAllLocalRecords();
+      const keptLocal = localRecords.filter((row) => {
+        if (!isTargetPeriodClass(row, year, month, kelas)) {
+          return true;
+        }
+        return isPureAinsRecord(row);
+      });
+      persistLocalRecords([...keptLocal, ...overrideRecords]);
+
+      let syncNote = "";
+      const config = window.NILAM_CONFIG || {};
+      if (config.supabaseUrl && config.supabaseAnonKey) {
+        try {
+          const studentsForSync = dedupeStudentsForSync(
+            state.nilamUpdateRows.map((row) =>
+              normalizeStudentRow({
+                nama: row.nama,
+                kelas: row.kelas || kelas,
+                no_kad_pengenalan: normalizeNoKad(row.no_kad_pengenalan) || syntheticNoKad(row),
+              })
+            )
+          );
+          await upsertStudentsToSupabase(studentsForSync, { deactivateMissing: false });
+          await overwriteNilamUpdateRecordsInSupabase(year, month, kelas, overrideRecords, config);
+          syncNote = " Data juga disimpan ke Supabase.";
+        } catch (syncError) {
+          console.error(syncError);
+          const detail = String(syncError?.message || syncError || "").slice(0, 220);
+          syncNote = ` Simpanan Supabase gagal (${detail}), tetapi data telah disimpan ke local.`;
+        }
+      }
+
+      await loadNilamUpdateDataSelection({ silentStatus: true });
+      setStatus(
+        `Kemas kini Data Nilam berjaya: ${rowsForSave.length} rekod disimpan untuk ${year} ${month} ${kelas}.${syncNote}`
+      );
+      showPopupStatus("Berjaya disimpan", false);
+    } catch (error) {
+      console.error(error);
+      const message = error?.message || "Gagal simpan Kemas Kini Data Nilam.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
+    }
+  }
+
+  async function overwriteNilamUpdateRecordsInSupabase(year, month, kelas, overrideRecords, config) {
+    const existingRows = await fetchSupabaseRecordsForPeriodClass(year, month, kelas, config);
+    const idsToDelete = existingRows
+      .filter((row) => !isPureAinsRecord(row))
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    if (idsToDelete.length) {
+      await deleteSupabaseRecordsByIds(idsToDelete, config);
+    }
+
+    const payload = dedupeRecordsForSupabase(overrideRecords).map((row) => {
+      const clean = { ...row };
+      delete clean.id;
+      return clean;
+    });
+    if (!payload.length) {
+      return;
+    }
+
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const insertEndpoint = `${supabaseUrl}/rest/v1/nilam_records`;
+    const insertRes = await fetch(insertEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!insertRes.ok) {
+      const detail = await insertRes.text();
+      throw new Error(`Sync kemas kini Nilam ke Supabase gagal (${insertRes.status}): ${detail}`);
+    }
+  }
+
+  async function fetchSupabaseRecordsForPeriodClass(year, month, kelas, config) {
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const params = new URLSearchParams({
+      select:
+        "id,tahun,bulan,tarikh,nama_pengisi,guru,bil,no_kad_pengenalan,nama,kelas,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
+      tahun: `eq.${year}`,
+      bulan: `eq.${month}`,
+      kelas: `eq.${kelas}`,
+      limit: "50000",
+    });
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Semakan rekod Supabase untuk kemas kini Nilam gagal (${response.status}): ${detail}`);
+    }
+    const rows = await response.json();
+    const normalized = [];
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const clean = normalizeImportedRecord(row, "");
+      if (clean) {
+        normalized.push(clean);
+      }
+    });
+    return normalized;
+  }
+
+  async function deleteSupabaseRecordsByIds(ids, config) {
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const batchSize = 300;
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const batch = ids.slice(i, i + batchSize);
+      const endpoint = `${supabaseUrl}/rest/v1/nilam_records?id=in.(${batch.join(",")})`;
+      const response = await fetch(endpoint, {
+        method: "DELETE",
+        headers: {
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${config.supabaseAnonKey}`,
+          Prefer: "return=minimal",
+        },
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`Padam rekod Supabase untuk kemas kini Nilam gagal (${response.status}): ${detail}`);
+      }
     }
   }
 
