@@ -983,11 +983,13 @@
 
       let syncNote = "";
       try {
+        await upsertStudentsToSupabase(parsed.matchedStudents || [], { deactivateMissing: false });
         await overwriteAinsInSupabase(year, month, parsed.records, ainsOverrideRecords);
         syncNote = " Data AINS juga disimpan ke Supabase.";
       } catch (syncError) {
         console.error(syncError);
-        syncNote = " Simpanan Supabase gagal, tetapi data AINS telah disimpan ke local.";
+        const detail = String(syncError?.message || syncError || "").slice(0, 220);
+        syncNote = ` Simpanan Supabase gagal (${detail}), tetapi data AINS telah disimpan ke local.`;
       }
 
       const baseMessage = `Import Data AINS berjaya: ${parsed.records.length} rekod untuk ${year} ${month} telah di-override.`;
@@ -1279,6 +1281,7 @@
 
     const nowIso = new Date().toISOString();
     const records = [];
+    const matchedStudents = [];
     let unmatchedCount = 0;
     const unmatchedRows = [];
     rows.forEach((row, index) => {
@@ -1299,6 +1302,16 @@
         });
         return;
       }
+
+      matchedStudents.push(
+        normalizeStudentRow({
+          nama: matchedStudent.nama,
+          kelas: matchedStudent.kelas,
+          no_kad_pengenalan: matchedStudent.no_kad_pengenalan || "",
+          jantina: matchedStudent.jantina || "",
+          email_google_classroom: matchedStudent.email_google_classroom || "",
+        })
+      );
 
       const noKad = matchedStudent.no_kad_pengenalan || syntheticNoKad(matchedStudent);
       const ains = toInt999(row[ainsColumn]);
@@ -1331,6 +1344,7 @@
       records: assignBilByClass(dedupeRecordsByNoKad(records)),
       unmatchedCount,
       unmatchedRows,
+      matchedStudents: dedupeStudentsForSync(matchedStudents),
     };
   }
 
@@ -1417,6 +1431,22 @@
         kelas: row.kelas || existing.kelas,
         email_google_classroom: row.email_google_classroom || existing.email_google_classroom,
       });
+    });
+    return [...map.values()];
+  }
+
+  function dedupeStudentsForSync(students) {
+    const map = new Map();
+    (Array.isArray(students) ? students : []).forEach((row) => {
+      const normalized = normalizeStudentRow(row);
+      if (!normalized.nama || !normalized.kelas) {
+        return;
+      }
+      const noKad = normalizeNoKad(normalized.no_kad_pengenalan);
+      const key = noKad || `nm:${normalized.nama.toLowerCase()}|k:${normalized.kelas.toLowerCase()}`;
+      if (!map.has(key)) {
+        map.set(key, normalized);
+      }
     });
     return [...map.values()];
   }
