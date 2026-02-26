@@ -1660,20 +1660,99 @@
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const endpoint =
       `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,tarikh,no_kad_pengenalan,nama_pengisi,guru`;
-    const response = await fetch(endpoint, {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${config.supabaseAnonKey}`,
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(records),
+      });
+
+      if (response.ok) {
+        return;
+      }
+
+      const detail = await response.text();
+      const isNoConflictConstraint = response.status === 400 && String(detail || "").includes("42P10");
+      if (!isNoConflictConstraint) {
+        throw new Error(`Sync import data ke Supabase gagal (${response.status}): ${detail}`);
+      }
+    } catch (error) {
+      const message = String(error && error.message ? error.message : error || "");
+      if (!message.includes("42P10")) {
+        throw error;
+      }
+    }
+
+    await replaceMonthlyAdminImportRecordsInSupabase(records, config);
+  }
+
+  async function replaceMonthlyAdminImportRecordsInSupabase(records, config) {
+    const safeRecords = Array.isArray(records) ? records.filter(Boolean) : [];
+    if (!safeRecords.length) {
+      return;
+    }
+
+    const year = String(safeRecords[0].tahun || "").trim();
+    const month = String(safeRecords[0].bulan || "").trim();
+    if (!year || !month) {
+      return;
+    }
+
+    const adminNames = [...new Set(
+      safeRecords
+        .map((row) => String(row.nama_pengisi || "").trim())
+        .filter(Boolean)
+    )];
+    const guruTypes = [...new Set(
+      safeRecords
+        .map((row) => normalizeGuruType(row.guru))
+        .filter(Boolean)
+    )];
+
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    for (const namaPengisi of adminNames) {
+      for (const guruType of guruTypes) {
+        const params = new URLSearchParams({
+          tahun: `eq.${year}`,
+          bulan: `eq.${month}`,
+          nama_pengisi: `eq.${namaPengisi}`,
+          guru: `eq.${guruType}`,
+        });
+        const deleteEndpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
+        const deleteRes = await fetch(deleteEndpoint, {
+          method: "DELETE",
+          headers: {
+            apikey: config.supabaseAnonKey,
+            Authorization: `Bearer ${config.supabaseAnonKey}`,
+          },
+        });
+        if (!deleteRes.ok) {
+          const detail = await deleteRes.text();
+          throw new Error(`Padam sesi ADMIN_IMPORT gagal (${deleteRes.status}): ${detail}`);
+        }
+      }
+    }
+
+    const insertEndpoint = `${supabaseUrl}/rest/v1/nilam_records`;
+    const insertRes = await fetch(insertEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: config.supabaseAnonKey,
         Authorization: `Bearer ${config.supabaseAnonKey}`,
-        Prefer: "resolution=merge-duplicates,return=minimal",
+        Prefer: "return=minimal",
       },
-      body: JSON.stringify(records),
+      body: JSON.stringify(safeRecords),
     });
 
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Sync import data ke Supabase gagal (${response.status}): ${detail}`);
+    if (!insertRes.ok) {
+      const detail = await insertRes.text();
+      throw new Error(`Simpan semula sesi ADMIN_IMPORT gagal (${insertRes.status}): ${detail}`);
     }
   }
 
