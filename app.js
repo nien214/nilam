@@ -38,6 +38,7 @@
     selectedDate: "",
     selectedTeacherName: "",
     selectedGuruType: "Nilam",
+    includeAinsInJumlah: true,
     teacherNames: [],
     prefillRequestSeq: 0,
   };
@@ -49,6 +50,7 @@
     tarikh: document.getElementById("tarikh"),
     tahun: document.getElementById("tahun"),
     kelas: document.getElementById("kelas"),
+    includeAinsCheckbox: document.getElementById("includeAinsJumlah"),
     tbody: document.querySelector("#studentTable tbody"),
     status: document.getElementById("status"),
     saveAll: document.getElementById("saveAll"),
@@ -200,6 +202,15 @@
       await renderTableAndPrefill();
     });
 
+    if (el.includeAinsCheckbox) {
+      el.includeAinsCheckbox.checked = true;
+      el.includeAinsCheckbox.addEventListener("change", () => {
+        state.includeAinsInJumlah = Boolean(el.includeAinsCheckbox.checked);
+        const config = window.NILAM_CONFIG || {};
+        loadAndApplyTotals(state.selectedYear, config).catch(() => {});
+      });
+    }
+
     if (el.saveAll) {
       el.saveAll.addEventListener("click", saveAllRecords);
     }
@@ -329,7 +340,7 @@
     resetClassDropdown();
     initClassDropdown(state.rawStudents);
     el.tbody.innerHTML =
-      '<tr><td colspan="13" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
+      '<tr><td colspan="14" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
   }
 
   async function refreshStudentsPreserveSelectedClass() {
@@ -361,14 +372,14 @@
   function renderTable() {
     if (!state.selectedClass) {
       el.tbody.innerHTML =
-        '<tr><td colspan="13" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
+        '<tr><td colspan="14" class="empty">Pilih kelas untuk paparkan senarai murid.</td></tr>';
       return;
     }
 
     const students = state.rawStudents.filter((s) => s.kelas === state.selectedClass);
     if (!students.length) {
       el.tbody.innerHTML =
-        '<tr><td colspan="13" class="empty">Tiada murid untuk kelas ini.</td></tr>';
+        '<tr><td colspan="14" class="empty">Tiada murid untuk kelas ini.</td></tr>';
       return;
     }
 
@@ -392,6 +403,7 @@
             <td>${numericInput("bahasa_inggeris")}</td>
             <td>${numericInput("lain_lain_bahasa")}</td>
             <td><span class="cell-total" data-col="jumlah_aktiviti">0</span></td>
+            <td><span class="cell-total" data-col="ains_sepanjang_tahun">—</span></td>
             <td><span class="cell-total" data-col="jumlah_tahun">—</span></td>
             <td><span class="cell-total" data-col="jumlah_all_time">—</span></td>
           </tr>
@@ -442,8 +454,37 @@
       bahan_bukan_buku: getNumberFromCell(row, "bahan_bukan_buku"),
       fiksyen: getNumberFromCell(row, "fiksyen"),
       bukan_fiksyen: getNumberFromCell(row, "bukan_fiksyen"),
-    });
+      ains: 0,
+    }, false);
     row.querySelector('[data-col="jumlah_aktiviti"]').textContent = String(total);
+  }
+
+  function computeAinsTotalFromRecord(row) {
+    return clampNilamNumber(row?.ains);
+  }
+
+  function computeTotalsMap(records, includeAins) {
+    const map = new Map();
+    records.forEach((r) => {
+      const noKad = String(r.no_kad_pengenalan || "").trim();
+      if (!noKad) {
+        return;
+      }
+      map.set(noKad, (map.get(noKad) || 0) + computeJumlahBacaanFromRecord(r, includeAins));
+    });
+    return map;
+  }
+
+  function computeAinsTotalsMap(records) {
+    const map = new Map();
+    records.forEach((r) => {
+      const noKad = String(r.no_kad_pengenalan || "").trim();
+      if (!noKad) {
+        return;
+      }
+      map.set(noKad, (map.get(noKad) || 0) + computeAinsTotalFromRecord(r));
+    });
+    return map;
   }
 
   function recalculateVisibleJumlahAktiviti() {
@@ -561,6 +602,59 @@
     return records;
   }
 
+  function validateNilamBalanceBeforeSave() {
+    const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
+    const mismatches = [];
+
+    rows.forEach((row) => {
+      const bahanJumlah =
+        getNumberFromCell(row, "bahan_digital") +
+        getNumberFromCell(row, "bahan_bukan_buku") +
+        getNumberFromCell(row, "fiksyen") +
+        getNumberFromCell(row, "bukan_fiksyen");
+      const bahasaJumlah =
+        getNumberFromCell(row, "bahasa_melayu") +
+        getNumberFromCell(row, "bahasa_inggeris") +
+        getNumberFromCell(row, "lain_lain_bahasa");
+
+      if (bahanJumlah === 0 && bahasaJumlah === 0) {
+        return;
+      }
+      if (bahanJumlah !== bahasaJumlah) {
+        mismatches.push({
+          nama: String(row.dataset.nama || "").trim() || "Tanpa Nama",
+          bahanJumlah,
+          bahasaJumlah,
+        });
+      }
+    });
+
+    if (!mismatches.length) {
+      return { ok: true, message: "" };
+    }
+
+    const preview = mismatches
+      .slice(0, 8)
+      .map(
+        (item, index) =>
+          `${index + 1}. ${item.nama} (Bahan: ${item.bahanJumlah}, Bahasa: ${item.bahasaJumlah})`
+      )
+      .join("\n");
+    const moreCount = mismatches.length > 8 ? `\n...dan ${mismatches.length - 8} lagi.` : "";
+
+    const message =
+      "Peringatan mesra untuk Guru Nilam:\n" +
+      "Jumlah Bahan Bacaan mesti sama dengan jumlah Bahasa bagi setiap murid.\n\n" +
+      "Sila semak murid berikut:\n" +
+      `${preview}${moreCount}\n\n` +
+      "Formula semakan:\n" +
+      "Bahan Digital + Bahan Bukan Buku + Fiksyen + Bukan Fiksyen\n" +
+      "mesti sama dengan\n" +
+      "Bahasa Melayu + Bahasa Inggeris + Lain-lain Bahasa.";
+
+    return { ok: false, message };
+  }
+
   async function saveAllRecords() {
     state.selectedTeacherName = String(el.namaPengisi?.value || state.selectedTeacherName || "").trim();
     if (state.selectedTeacherName) {
@@ -600,6 +694,18 @@
       setStatus(message, true);
       showPopupStatus(message, true);
       return;
+    }
+
+    if (state.selectedGuruType === "Nilam") {
+      const check = validateNilamBalanceBeforeSave();
+      if (!check.ok) {
+        setStatus(
+          "Simpanan ditangguhkan: jumlah Bahan Bacaan dan jumlah Bahasa tidak sepadan untuk sesetengah murid.",
+          true
+        );
+        window.alert(check.message);
+        return;
+      }
     }
 
     let records = [];
@@ -701,7 +807,7 @@
       if (requestSeq !== state.prefillRequestSeq) {
         return;
       }
-      applyTotalsToTable(totals.yearTotals, totals.allTimeTotals);
+      applyTotalsToTable(totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
 
       if (!state.selectedTeacherName || !state.selectedGuruType || !state.selectedDate) {
         setStatus(
@@ -910,31 +1016,23 @@
     return all;
   }
 
-  function computeTotalsMap(records) {
-    const map = new Map();
-    records.forEach((r) => {
-      const noKad = String(r.no_kad_pengenalan || "").trim();
-      if (!noKad) {
-        return;
-      }
-      map.set(noKad, (map.get(noKad) || 0) + computeJumlahBacaanFromRecord(r));
-    });
-    return map;
-  }
-
-  function computeJumlahBacaanFromRecord(row) {
-    return (
+  function computeJumlahBacaanFromRecord(row, includeAins) {
+    const totalWithoutAins = (
       clampNilamNumber(row?.bahan_digital) +
       clampNilamNumber(row?.bahan_bukan_buku) +
       clampNilamNumber(row?.fiksyen) +
       clampNilamNumber(row?.bukan_fiksyen)
     );
+    if (!includeAins) {
+      return totalWithoutAins;
+    }
+    return totalWithoutAins + clampNilamNumber(row?.ains);
   }
 
   async function fetchTotalsFromSupabase(year, config) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
-      select: "no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,jumlah_aktiviti",
+      select: "no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,jumlah_aktiviti",
       limit: "10000",
     });
     if (year) {
@@ -960,25 +1058,33 @@
           fetchTotalsFromSupabase(null, config),
         ]);
         return {
-          yearTotals: computeTotalsMap(yearRecords),
-          allTimeTotals: computeTotalsMap(allRecords),
+          yearAinsTotals: computeAinsTotalsMap(yearRecords),
+          yearTotals: computeTotalsMap(yearRecords, state.includeAinsInJumlah),
+          allTimeTotals: computeTotalsMap(allRecords, state.includeAinsInJumlah),
         };
       } catch (error) {
         console.error("Gagal muat jumlah dari Supabase, guna localStorage", error);
       }
     }
+    const localYearRecords = loadLocalRecordsForYear(year);
+    const localAllRecords = loadAllLocalRecords();
     return {
-      yearTotals: computeTotalsMap(loadLocalRecordsForYear(year)),
-      allTimeTotals: computeTotalsMap(loadAllLocalRecords()),
+      yearAinsTotals: computeAinsTotalsMap(localYearRecords),
+      yearTotals: computeTotalsMap(localYearRecords, state.includeAinsInJumlah),
+      allTimeTotals: computeTotalsMap(localAllRecords, state.includeAinsInJumlah),
     };
   }
 
-  function applyTotalsToTable(yearTotals, allTimeTotals) {
+  function applyTotalsToTable(yearAinsTotals, yearTotals, allTimeTotals) {
     const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
     rows.forEach((row) => {
       const noKad = String(row.dataset.noKad || "").trim();
+      const ainsYearCell = row.querySelector('[data-col="ains_sepanjang_tahun"]');
       const yrCell = row.querySelector('[data-col="jumlah_tahun"]');
       const atCell = row.querySelector('[data-col="jumlah_all_time"]');
+      if (ainsYearCell) {
+        ainsYearCell.textContent = String(yearAinsTotals.get(noKad) || 0);
+      }
       if (yrCell) {
         yrCell.textContent = String(yearTotals.get(noKad) || 0);
       }
@@ -990,7 +1096,7 @@
 
   async function loadAndApplyTotals(year, config) {
     const totals = await loadTotals(year, config);
-    applyTotalsToTable(totals.yearTotals, totals.allTimeTotals);
+    applyTotalsToTable(totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
   }
 
   async function loadSavedRecordsFromSupabase(year, month, kelas, tarikh, namaPengisi, guruType, config) {

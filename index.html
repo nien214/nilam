@@ -51,6 +51,13 @@
 
     <p id="status" role="status" aria-live="polite"></p>
 
+    <div class="jumlah-toggle">
+      <label>
+        <input id="includeAinsJumlah" type="checkbox" checked>
+        Jumlah bacaan termasuk AINS
+      </label>
+    </div>
+
     <section class="table-wrap">
       <table id="studentTable">
         <thead>
@@ -66,13 +73,14 @@
             <th>Bahasa<br>Inggeris</th>
             <th>Lain-lain<br>Bahasa</th>
             <th>Jumlah Bacaan<br>Bulan ini</th>
+            <th>AINS<br>(Sepanjang Tahun)</th>
             <th>Jumlah Bacaan<br>Tahun ini</th>
             <th>Jumlah Bacaan<br>Sejak Per/T1</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td colspan="13" class="empty">Pilih kelas untuk paparkan senarai murid.</td>
+            <td colspan="14" class="empty">Pilih kelas untuk paparkan senarai murid.</td>
           </tr>
         </tbody>
       </table>

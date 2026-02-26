@@ -440,7 +440,7 @@ td:nth-child(11) {
 
 #studentTable th:nth-child(n + 3),
 #studentTable td:nth-child(n + 3) {
-  width: calc((100% - 62ch) / 11);
+  width: calc((100% - 62ch) / 12);
 }
 
 #studentTable th:nth-child(11),
@@ -448,7 +448,9 @@ td:nth-child(11) {
 #studentTable th:nth-child(12),
 #studentTable td:nth-child(12),
 #studentTable th:nth-child(13),
-#studentTable td:nth-child(13) {
+#studentTable td:nth-child(13),
+#studentTable th:nth-child(14),
+#studentTable td:nth-child(14) {
   text-align: center;
 }
 
