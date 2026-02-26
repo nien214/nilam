@@ -81,6 +81,9 @@
     initDateField();
     fitEntryControls();
     bindEvents();
+    refreshTeacherNamesFromSupabase().catch((error) => {
+      console.error("Gagal memuatkan nama guru dari Supabase", error);
+    });
 
     // Phase 1 — show local data instantly (no network wait).
     const localStudents = getLocalStudentsFast();
@@ -1702,6 +1705,59 @@
       }
     });
     return [...merged].sort((a, b) => a.localeCompare(b, "ms"));
+  }
+
+  async function fetchTeacherNamesFromSupabase(config) {
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return [];
+    }
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const params = new URLSearchParams({
+      select: "nama_guru",
+      order: "nama_guru.asc",
+      limit: "5000",
+    });
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_teachers?${params.toString()}`;
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Ralat muat nama guru Supabase (${response.status}): ${detail}`);
+    }
+    const rows = await response.json();
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+    return rows
+      .map((row) => String(row?.nama_guru || "").trim())
+      .filter(Boolean);
+  }
+
+  async function refreshTeacherNamesFromSupabase() {
+    const config = window.NILAM_CONFIG || {};
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return;
+    }
+    const cloudNames = await fetchTeacherNamesFromSupabase(config);
+    if (!cloudNames.length) {
+      return;
+    }
+    const merged = [...new Set([...state.teacherNames, ...cloudNames])]
+      .map((name) => String(name || "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "ms"));
+    if (merged.length === state.teacherNames.length && merged.every((name, idx) => name === state.teacherNames[idx])) {
+      return;
+    }
+    state.teacherNames = merged;
+    saveTeacherNames();
+    renderTeacherSuggestions(state.selectedTeacherName);
+    fitTeacherNameInputWidth();
   }
 
   function saveTeacherNames() {

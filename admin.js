@@ -795,14 +795,31 @@
         throw new Error("Tiada nama guru sah dijumpai.");
       }
 
-      const existing = loadStoredTeacherNames();
+      const existingLocal = loadStoredTeacherNames();
+      let existingCloud = [];
+      try {
+        existingCloud = await fetchTeacherNamesFromSupabase(window.NILAM_CONFIG || {});
+      } catch (error) {
+        console.error("Gagal muat senarai nama guru dari Supabase", error);
+      }
+      const existing = [...new Set([...existingLocal, ...existingCloud])];
       const merged = [...new Set([...existing, ...importedNames])].sort((a, b) =>
         a.localeCompare(b, "ms")
       );
       localStorage.setItem(TEACHER_NAMES_KEY, JSON.stringify(merged));
 
+      let syncNote = "";
+      try {
+        await upsertTeacherNamesToSupabase(merged);
+        syncNote = " Senarai nama guru juga disimpan ke Supabase.";
+      } catch (syncError) {
+        console.error(syncError);
+        const detail = String(syncError?.message || syncError || "").slice(0, 220);
+        syncNote = ` Simpanan Supabase gagal (${detail}), tetapi senarai telah disimpan ke local.`;
+      }
+
       setStatus(
-        `Import Nama Guru berjaya: ${importedNames.length} nama diproses, jumlah senarai ${merged.length}.`
+        `Import Nama Guru berjaya: ${importedNames.length} nama diproses, jumlah senarai ${merged.length}.${syncNote}`
       );
       showPopupStatus("Berjaya disimpan", false);
     } catch (error) {
@@ -2259,6 +2276,70 @@
     } catch (error) {
       console.error("Gagal parse senarai nama guru", error);
       return [];
+    }
+  }
+
+  async function fetchTeacherNamesFromSupabase(config) {
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return [];
+    }
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const params = new URLSearchParams({
+      select: "nama_guru",
+      order: "nama_guru.asc",
+      limit: "5000",
+    });
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_teachers?${params.toString()}`;
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+      },
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Ralat muat nama guru Supabase (${response.status}): ${detail}`);
+    }
+    const rows = await response.json();
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+    return rows
+      .map((row) => String(row?.nama_guru || "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "ms"));
+  }
+
+  async function upsertTeacherNamesToSupabase(names) {
+    const config = window.NILAM_CONFIG || {};
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      return;
+    }
+    const list = [...new Set((Array.isArray(names) ? names : []).map((name) => String(name || "").trim()).filter(Boolean))];
+    if (!list.length) {
+      return;
+    }
+
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_teachers?on_conflict=nama_guru`;
+    const chunkSize = 500;
+    for (let i = 0; i < list.length; i += chunkSize) {
+      const chunk = list.slice(i, i + chunkSize).map((name) => ({ nama_guru: name }));
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: config.supabaseAnonKey,
+          Authorization: `Bearer ${config.supabaseAnonKey}`,
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(chunk),
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`Ralat simpan nama guru ke Supabase (${response.status}): ${detail}`);
+      }
     }
   }
 
