@@ -768,7 +768,7 @@
   }
 
   async function saveAllRecords() {
-    state.selectedTeacherName = String(el.namaPengisi?.value || state.selectedTeacherName || "").trim();
+    state.selectedTeacherName = String(el.namaPengisi?.value || "").trim();
     if (state.selectedTeacherName) {
       rememberTeacherName(state.selectedTeacherName);
     }
@@ -787,6 +787,7 @@
       const message = "Sila isi Nama Guru dahulu.";
       setStatus(message, true);
       showPopupStatus(message, true);
+      el.namaPengisi?.focus();
       return;
     }
     if (!state.selectedGuruType) {
