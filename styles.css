@@ -6,6 +6,15 @@
   --line: #d9e1e4;
   --accent: #127475;
   --accent-2: #0f8b8d;
+  --table-row-odd: #ffffff;
+  --table-row-even: #f4f9fa;
+  --table-material-odd: #edf4f6;
+  --table-material-even: #e5eff2;
+  --table-material-head: #deecef;
+  --table-sticky-col1-odd: #f3f8f8;
+  --table-sticky-col1-even: #eaf3f4;
+  --table-sticky-col2-odd: #f8fbfb;
+  --table-sticky-col2-even: #eef6f7;
   color-scheme: light;
 }
 
@@ -456,6 +465,67 @@ th {
   font-weight: 700;
 }
 
+/* Alternating rows for key NILAM data tables */
+#studentTable tbody tr:nth-child(odd) > td,
+#summaryTable tbody tr:nth-child(odd) > td,
+#nilamUpdateTable tbody tr:nth-child(odd) > td,
+.heatmap-table tbody tr:nth-child(odd) > td {
+  background: var(--table-row-odd);
+}
+
+#studentTable tbody tr:nth-child(even) > td,
+#summaryTable tbody tr:nth-child(even) > td,
+#nilamUpdateTable tbody tr:nth-child(even) > td,
+.heatmap-table tbody tr:nth-child(even) > td {
+  background: var(--table-row-even);
+}
+
+/* Slightly darker material columns: Bahan Digital, Bahan Bukan Buku, Fiksyen, Bukan Fiksyen */
+#studentTable thead th:nth-child(4),
+#studentTable thead th:nth-child(5),
+#studentTable thead th:nth-child(6),
+#studentTable thead th:nth-child(7),
+#summaryTable thead th:nth-child(3),
+#summaryTable thead th:nth-child(4),
+#summaryTable thead th:nth-child(5),
+#summaryTable thead th:nth-child(6),
+#nilamUpdateTable thead th:nth-child(4),
+#nilamUpdateTable thead th:nth-child(5),
+#nilamUpdateTable thead th:nth-child(6),
+#nilamUpdateTable thead th:nth-child(7) {
+  background: var(--table-material-head);
+}
+
+#studentTable tbody td:nth-child(4),
+#studentTable tbody td:nth-child(5),
+#studentTable tbody td:nth-child(6),
+#studentTable tbody td:nth-child(7),
+#summaryTable tbody td:nth-child(3),
+#summaryTable tbody td:nth-child(4),
+#summaryTable tbody td:nth-child(5),
+#summaryTable tbody td:nth-child(6),
+#nilamUpdateTable tbody td:nth-child(4),
+#nilamUpdateTable tbody td:nth-child(5),
+#nilamUpdateTable tbody td:nth-child(6),
+#nilamUpdateTable tbody td:nth-child(7) {
+  background: var(--table-material-odd);
+}
+
+#studentTable tbody tr:nth-child(even) td:nth-child(4),
+#studentTable tbody tr:nth-child(even) td:nth-child(5),
+#studentTable tbody tr:nth-child(even) td:nth-child(6),
+#studentTable tbody tr:nth-child(even) td:nth-child(7),
+#summaryTable tbody tr:nth-child(even) td:nth-child(3),
+#summaryTable tbody tr:nth-child(even) td:nth-child(4),
+#summaryTable tbody tr:nth-child(even) td:nth-child(5),
+#summaryTable tbody tr:nth-child(even) td:nth-child(6),
+#nilamUpdateTable tbody tr:nth-child(even) td:nth-child(4),
+#nilamUpdateTable tbody tr:nth-child(even) td:nth-child(5),
+#nilamUpdateTable tbody tr:nth-child(even) td:nth-child(6),
+#nilamUpdateTable tbody tr:nth-child(even) td:nth-child(7) {
+  background: var(--table-material-even);
+}
+
 td:nth-child(1),
 td:nth-child(4),
 td:nth-child(5),
@@ -526,7 +596,7 @@ td:nth-child(11) {
   position: sticky;
   left: 0;
   z-index: 6;
-  background: #f3f8f8;
+  background: var(--table-sticky-col1-odd);
 }
 
 #studentTable th:nth-child(2),
@@ -534,7 +604,15 @@ td:nth-child(11) {
   position: sticky;
   left: 4ch;
   z-index: 6;
-  background: #f8fbfb;
+  background: var(--table-sticky-col2-odd);
+}
+
+#studentTable tbody tr:nth-child(even) > td:nth-child(1) {
+  background: var(--table-sticky-col1-even);
+}
+
+#studentTable tbody tr:nth-child(even) > td:nth-child(2) {
+  background: var(--table-sticky-col2-even);
 }
 
 #studentTable thead th:nth-child(1),
