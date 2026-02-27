@@ -197,6 +197,10 @@
           rememberTeacherName(state.selectedTeacherName);
         }
         if (state.selectedClass) {
+          if (hasUnsavedTableDraft()) {
+            setStatus("Nama Guru dikemas kini. Data belum disimpan dikekalkan dalam jadual semasa.");
+            return;
+          }
           await renderTableAndPrefill();
         }
       });
@@ -459,7 +463,7 @@
         return `
           <tr data-row-id="${rowId}" data-nama="${escapeHtml(student.nama)}" data-kelas="${escapeHtml(
           student.kelas
-        )}" data-no-kad="${escapeHtml(student.no_kad_pengenalan || "")}" data-has-saved-session="0">
+        )}" data-no-kad="${escapeHtml(student.no_kad_pengenalan || "")}" data-has-saved-session="0" data-is-dirty="0">
             <td>${index + 1}</td>
             <td><span class="cell-static cell-name">${escapeHtml(student.nama)}</span></td>
             <td><span class="cell-static">${escapeHtml(student.kelas)}</span></td>
@@ -497,8 +501,24 @@
           return;
         }
         normalizeIntegerInput(event.target);
-        updateJumlahAktiviti(event.target.closest("tr"));
+        const row = event.target.closest("tr");
+        if (row) {
+          row.dataset.isDirty = "1";
+        }
+        updateJumlahAktiviti(row);
       });
+    });
+  }
+
+  function hasUnsavedTableDraft() {
+    const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
+    return rows.some((row) => {
+      if (row.dataset.isDirty === "1") {
+        return true;
+      }
+      const hasAnyInput = inputColumns.some((colName) => getNumberFromCell(row, colName) > 0);
+      const hadSavedSession = row.dataset.hasSavedSession === "1";
+      return hasAnyInput && !hadSavedSession;
     });
   }
 
@@ -851,6 +871,11 @@
       `${supabaseUrl}/rest/v1/nilam_records?on_conflict=tahun,bulan,tarikh,no_kad_pengenalan,nama_pengisi,guru`;
 
     try {
+      try {
+        await ensureTeacherExistsInSupabase(state.selectedTeacherName, config);
+      } catch (teacherError) {
+        console.error("Gagal kemas kini senarai nama guru di Supabase", teacherError);
+      }
       await ensureStudentsExistInSupabase(records, config);
 
       const response = await fetch(endpoint, {
@@ -986,6 +1011,7 @@
         setNumberToCell(row, colName, saved[colName]);
       });
       row.dataset.hasSavedSession = "1";
+      row.dataset.isDirty = "0";
       updateJumlahAktiviti(row);
     });
   }
@@ -1680,6 +1706,29 @@
     return Math.max(0, Math.min(max, Math.trunc(number)));
   }
 
+  async function ensureTeacherExistsInSupabase(teacherName, config) {
+    const cleanName = String(teacherName || "").trim();
+    if (!cleanName) {
+      return;
+    }
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_teachers?on_conflict=nama_guru`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify([{ nama_guru: cleanName }]),
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Ralat simpan nama guru ke Supabase (${response.status}): ${detail}`);
+    }
+  }
+
   async function ensureStudentsExistInSupabase(records, config) {
     if (!Array.isArray(records) || !records.length) {
       return;
@@ -1911,6 +1960,10 @@
     fitTeacherNameInputWidth();
     rememberTeacherName(chosen);
     if (state.selectedClass) {
+      if (hasUnsavedTableDraft()) {
+        setStatus("Nama Guru dikemas kini. Data belum disimpan dikekalkan dalam jadual semasa.");
+        return;
+      }
       await renderTableAndPrefill();
     }
   }
