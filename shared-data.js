@@ -356,6 +356,41 @@
     return INPUT_COLUMNS.some((col) => Number(row[col]) > 0);
   }
 
+  async function fetchAllSupabaseRows(endpoint, headers, pageSize) {
+    const rows = [];
+    const step = Math.max(1, Math.trunc(Number(pageSize) || 1000));
+    let offset = 0;
+
+    // Supabase/PostgREST may cap each response to 1000 rows even when a larger limit is requested.
+    while (true) {
+      const separator = endpoint.includes("?") ? "&" : "?";
+      const pagedEndpoint = `${endpoint}${separator}offset=${offset}&limit=${step}`;
+      const response = await fetch(pagedEndpoint, {
+        method: "GET",
+        cache: "no-store",
+        headers,
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`Ralat muat data Supabase (${response.status}): ${detail}`);
+      }
+
+      const page = await response.json();
+      if (!Array.isArray(page) || !page.length) {
+        break;
+      }
+
+      rows.push(...page);
+      if (page.length < step) {
+        break;
+      }
+      offset += step;
+    }
+
+    return rows;
+  }
+
   function getLocalRecords() {
     const records = [];
     const prefix = "nilam_records_";
@@ -393,30 +428,18 @@
     const params = new URLSearchParams({
       select:
         "tahun,bulan,tarikh,nama_pengisi,guru,kelas,nama,no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
-      limit: "50000",
       order: "updated_at_client.desc",
     });
 
     const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
-    const response = await fetch(endpoint, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
+    const rows = await fetchAllSupabaseRows(
+      endpoint,
+      {
         apikey: config.supabaseAnonKey,
         Authorization: `Bearer ${config.supabaseAnonKey}`,
       },
-    });
-
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Ralat muat data Supabase (${response.status}): ${detail}`);
-    }
-
-    const rows = await response.json();
-    if (!Array.isArray(rows)) {
-      return [];
-    }
-
+      1000
+    );
     return rows.map(normalizeRecord);
   }
 
@@ -432,28 +455,16 @@
       select: `no_kad_pengenalan,nama_murid,jantina,email_google_classroom,${kelasField}`,
       active: "neq.false",
       order: "nama_murid.asc",
-      limit: "50000",
     });
     const endpoint = `${supabaseUrl}/rest/v1/nilam_students?${params.toString()}`;
-
-    const response = await fetch(endpoint, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
+    const rows = await fetchAllSupabaseRows(
+      endpoint,
+      {
         apikey: config.supabaseAnonKey,
         Authorization: `Bearer ${config.supabaseAnonKey}`,
       },
-    });
-
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Ralat muat senarai murid Supabase (${response.status}): ${detail}`);
-    }
-
-    const rows = await response.json();
-    if (!Array.isArray(rows)) {
-      return [];
-    }
+      1000
+    );
 
     return rows.map((row) => ({
       nama: normalizeText(row.nama_murid),
