@@ -224,7 +224,10 @@
     renderTingkatanBars(periodRecords);
     renderBar(filtered);
     renderStarDistribution(periodRecords, state.selectedClass, state.selectedTingkatan);
-    renderClassHeatmap(filtered);
+    const heatmapYearlyRecords = isAllClasses
+      ? yearlyTingkatanRecords
+      : yearlyTingkatanRecords.filter((row) => row.kelas === state.selectedClass);
+    renderClassHeatmap(filtered, heatmapYearlyRecords);
   }
 
   function updateChartTitles(classText, periodText, tingkatanText, recentMonthText) {
@@ -1072,40 +1075,46 @@
     `;
   }
 
-  function renderClassHeatmap(records) {
-    const classes = [...new Set(records.map((row) => String(row.kelas || "").trim()).filter(Boolean))].sort((a, b) =>
-      a.localeCompare(b, "ms")
-    );
+  function renderClassHeatmap(records, yearlyRecords) {
+    const classes = getHeatmapClasses(records, yearlyRecords);
     if (!classes.length) {
       el.heatmapWrap.innerHTML = '<p class="empty">Tiada data kelas.</p>';
       return;
     }
 
-    const rowCodes = TINGKATAN_ORDER.filter((code) =>
-      records.some((row) => classToTingkatan(row.kelas) === code)
-    );
+    const months = getHeatmapMonths();
+    if (!months.length) {
+      el.heatmapWrap.innerHTML = '<p class="empty">Tiada data kelas.</p>';
+      return;
+    }
+
     const matrix = new Map();
-    rowCodes.forEach((code) => matrix.set(code, new Map(classes.map((kelas) => [kelas, 0]))));
+    months.forEach((month) => matrix.set(month, new Map(classes.map((kelas) => [kelas, 0]))));
 
     records.forEach((row) => {
-      const code = classToTingkatan(row.kelas);
+      const month = String(row.bulan || "").trim();
       const kelas = String(row.kelas || "").trim();
-      if (!matrix.has(code) || !kelas) {
+      if (!matrix.has(month) || !kelas) {
         return;
       }
-      const rowMap = matrix.get(code);
-      rowMap.set(kelas, (rowMap.get(kelas) || 0) + computeJumlahBacaan(row));
+      const rowMap = matrix.get(month);
+      if (!rowMap.has(kelas)) {
+        return;
+      }
+      rowMap.set(kelas, (rowMap.get(kelas) || 0) + computeBahanBacaan(row));
     });
 
+    const classTotals = new Map(classes.map((kelas) => [kelas, 0]));
+    const yearlyAinsByClass = computeYearlyAinsByClass(yearlyRecords, classes);
+
     const maxValue = Math.max(
-      ...rowCodes.flatMap((code) => classes.map((kelas) => matrix.get(code).get(kelas) || 0)),
+      ...months.flatMap((month) => classes.map((kelas) => matrix.get(month).get(kelas) || 0)),
       0
     );
-    const classTotals = new Map(classes.map((kelas) => [kelas, 0]));
 
-    const bodyRows = rowCodes
-      .map((code) => {
-        const rowMap = matrix.get(code);
+    const bodyRows = months
+      .map((month) => {
+        const rowMap = matrix.get(month);
         let rowTotal = 0;
         const tds = classes
           .map((kelas) => {
@@ -1117,35 +1126,108 @@
             return `<td${bg}>${value}</td>`;
           })
           .join("");
-        const label = code === "PER" ? "PER" : `T${code}`;
-        return `<tr><td>${label}</td>${tds}<td><strong>${rowTotal}</strong></td></tr>`;
+        return `<tr><td>${escapeHtml(month)}</td>${tds}<td><strong>${rowTotal}</strong></td></tr>`;
       })
       .join("");
+
+    if (state.includeAinsInJumlah) {
+      yearlyAinsByClass.forEach((ains, kelas) => {
+        classTotals.set(kelas, (classTotals.get(kelas) || 0) + ains);
+      });
+    }
 
     const allTotal = [...classTotals.values()].reduce((sum, value) => sum + value, 0);
     const footerCells = classes
       .map((kelas) => `<td><strong>${classTotals.get(kelas) || 0}</strong></td>`)
       .join("");
+    const note = state.includeAinsInJumlah
+      ? '<p class="chart-note">Baris bulanan memaparkan bahan bacaan. Baris JUMLAH menambah AINS sepanjang tahun sekali bagi setiap murid.</p>'
+      : "";
 
     el.heatmapWrap.innerHTML = `
+      ${note}
       <table class="heatmap-table">
         <thead>
           <tr>
-            <th>Tingkatan</th>
+            <th>Bulan</th>
             ${classes.map((kelas) => `<th>${escapeHtml(kelas)}</th>`).join("")}
-            <th>Grand Total</th>
+            <th>Jumlah</th>
           </tr>
         </thead>
         <tbody>
           ${bodyRows}
           <tr>
-            <td><strong>JUMLAH</strong></td>
+            <td><strong>JUMLAH BACAAN</strong></td>
             ${footerCells}
             <td><strong>${allTotal}</strong></td>
           </tr>
         </tbody>
       </table>
     `;
+  }
+
+  function getHeatmapClasses(records, yearlyRecords) {
+    if (state.selectedClass && state.selectedClass !== "__all__") {
+      return [state.selectedClass];
+    }
+
+    const classSet = new Set();
+    state.classes.forEach((kelas) => {
+      const cleanKelas = String(kelas || "").trim();
+      if (cleanKelas) {
+        classSet.add(cleanKelas);
+      }
+    });
+    [records, yearlyRecords].forEach((rows) => {
+      (Array.isArray(rows) ? rows : []).forEach((row) => {
+        const kelas = String(row.kelas || "").trim();
+        if (kelas) {
+          classSet.add(kelas);
+        }
+      });
+    });
+    return [...classSet].sort((a, b) => a.localeCompare(b, "ms"));
+  }
+
+  function getHeatmapMonths() {
+    if (state.selectedMonth && state.selectedMonth !== "__year__") {
+      return [state.selectedMonth];
+    }
+    const latestMonth = getMostRecentMonthText(state.records, state.selectedYear, "__year__");
+    const latestIndex = MONTHS.indexOf(latestMonth);
+    if (latestIndex < 0) {
+      return [];
+    }
+    return MONTHS.slice(0, latestIndex + 1);
+  }
+
+  function computeYearlyAinsByClass(records, classes) {
+    const allowedClasses = new Set((Array.isArray(classes) ? classes : []).map((kelas) => String(kelas || "").trim()));
+    const maxAinsByStudent = new Map();
+
+    (Array.isArray(records) ? records : []).forEach((row) => {
+      const kelas = String(row.kelas || "").trim();
+      if (!kelas || !allowedClasses.has(kelas)) {
+        return;
+      }
+      const noKad = normalizeKeyText(row.no_kad_pengenalan);
+      const nama = normalizeKeyText(row.nama);
+      const studentKey = noKad ? `ic:${noKad}` : nama ? `nm:${nama}|k:${kelas.toLowerCase()}` : "";
+      if (!studentKey) {
+        return;
+      }
+      const nextAins = Math.max(0, Math.trunc(Number(row.ains || 0)));
+      const current = maxAinsByStudent.get(studentKey);
+      if (!current || nextAins > current.ains) {
+        maxAinsByStudent.set(studentKey, { kelas, ains: nextAins });
+      }
+    });
+
+    const totals = new Map([...allowedClasses].map((kelas) => [kelas, 0]));
+    maxAinsByStudent.forEach((entry) => {
+      totals.set(entry.kelas, (totals.get(entry.kelas) || 0) + entry.ains);
+    });
+    return totals;
   }
 
   function normalizeKeyText(value) {

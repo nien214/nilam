@@ -1046,6 +1046,7 @@ td:nth-child(11) {
 
 .heatmap-table {
   min-width: 920px;
+  table-layout: auto;
 }
 
 .heatmap-table th,
@@ -1057,7 +1058,9 @@ td:nth-child(11) {
 .heatmap-table th:first-child,
 .heatmap-table td:first-child {
   text-align: left;
-  min-width: 84px;
+  width: 132px;
+  min-width: 132px;
+  white-space: nowrap;
 }
 
 /* Row hover highlight — applies across all tables */
