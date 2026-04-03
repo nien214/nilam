@@ -641,12 +641,7 @@
     if (!input) {
       return;
     }
-    if (input.dataset.field === "kelas") {
-      syncCurrentPageToState();
-      sortStudentsByClassThenName();
-      state.currentPage = 1;
-      renderManageTable();
-    }
+    syncCurrentPageToState();
     queueAutoSync({ deactivateMissing: false });
   }
 
