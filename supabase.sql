@@ -37,11 +37,11 @@ create table if not exists public.nilam_records (
   bahan_bukan_buku integer not null default 0 check (bahan_bukan_buku between 0 and 999),
   fiksyen integer not null default 0 check (fiksyen between 0 and 999),
   bukan_fiksyen integer not null default 0 check (bukan_fiksyen between 0 and 999),
-  ains integer not null default 0 check (ains between 0 and 999),
+  ains integer not null default 0 check (ains >= 0),
   bahasa_melayu integer not null default 0 check (bahasa_melayu between 0 and 999),
   bahasa_inggeris integer not null default 0 check (bahasa_inggeris between 0 and 999),
   lain_lain_bahasa integer not null default 0 check (lain_lain_bahasa between 0 and 999),
-  jumlah_aktiviti integer not null default 0 check (jumlah_aktiviti between 0 and 4995),
+  jumlah_aktiviti integer not null default 0 check (jumlah_aktiviti >= 0),
   updated_at_client timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -75,7 +75,17 @@ drop constraint if exists nilam_records_jumlah_aktiviti_range_check;
 
 alter table public.nilam_records
 add constraint nilam_records_jumlah_aktiviti_range_check
-check (jumlah_aktiviti between 0 and 4995);
+check (jumlah_aktiviti >= 0);
+
+alter table public.nilam_records
+drop constraint if exists nilam_records_ains_check;
+
+alter table public.nilam_records
+drop constraint if exists nilam_records_ains_range_check;
+
+alter table public.nilam_records
+add constraint nilam_records_ains_range_check
+check (ains >= 0);
 
 alter table public.nilam_records
 drop constraint if exists nilam_records_bulan_kelas_nama_key;

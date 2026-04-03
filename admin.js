@@ -1462,7 +1462,7 @@
       if (!key) {
         return;
       }
-      const next = toInt999(row.ains);
+      const next = toAinsInt(row.ains);
       if (!map.has(key) || next > map.get(key)) {
         map.set(key, next);
       }
@@ -1479,7 +1479,7 @@
         return;
       }
       const yearKey = `${key}|${year}`;
-      const next = toInt999(row.ains);
+      const next = toAinsInt(row.ains);
       if (!byStudentYear.has(yearKey) || next > byStudentYear.get(yearKey)) {
         byStudentYear.set(yearKey, next);
       }
@@ -1585,7 +1585,7 @@
   }
 
   function isPureAinsRecord(row) {
-    const ains = toInt999(row?.ains);
+    const ains = toAinsInt(row?.ains);
     const nonAinsTotal =
       getMaterialsTotalWithoutAins(row) +
       toInt999(row?.bahasa_melayu) +
@@ -2045,7 +2045,7 @@
       const bahanBukanBuku = toInt999(row[bahanBukanBukuColumn]);
       const fiksyen = toInt999(row[fiksyenColumn]);
       const bukanFiksyen = toInt999(row[bukanFiksyenColumn]);
-      const ains = toInt999(ainsColumn ? row[ainsColumn] : 0);
+      const ains = toAinsInt(ainsColumn ? row[ainsColumn] : 0);
       const bahasaMelayu = toInt999(row[bmColumn]);
       const bahasaInggeris = toInt999(row[biColumn]);
       const lainLainBahasa = toInt999(row[lainColumn]);
@@ -2157,7 +2157,7 @@
       );
 
       const noKad = matchedStudent.no_kad_pengenalan || syntheticNoKad(matchedStudent);
-      const ains = toInt999(row[ainsColumn]);
+      const ains = toAinsInt(row[ainsColumn]);
       const tarikh = defaultTarikhForPeriod(year, month);
 
       records.push({
@@ -2221,7 +2221,7 @@
     const bahanBukanBuku = toInt999(existing.bahan_bukan_buku);
     const fiksyen = toInt999(existing.fiksyen);
     const bukanFiksyen = toInt999(existing.bukan_fiksyen);
-    const ains = toInt999(ainsImportRow.ains);
+    const ains = toAinsInt(ainsImportRow.ains);
     const fallbackBil = toPositiveInt(ainsImportRow.bil, 1);
     const bahasaMelayu = toInt999(existing.bahasa_melayu);
     const bahasaInggeris = toInt999(existing.bahasa_inggeris);
@@ -2404,7 +2404,7 @@
     const bahanBukanBuku = toInt999(row.bahan_bukan_buku);
     const fiksyen = toInt999(row.fiksyen);
     const bukanFiksyen = toInt999(row.bukan_fiksyen);
-    const ains = toInt999(row.ains);
+    const ains = toAinsInt(row.ains);
     const bm = toInt999(row.bahasa_melayu);
     const bi = toInt999(row.bahasa_inggeris);
     const lain = toInt999(row.lain_lain_bahasa);
@@ -2447,7 +2447,7 @@
       toInt999(row?.bahan_bukan_buku) +
       toInt999(row?.fiksyen) +
       toInt999(row?.bukan_fiksyen) +
-      toInt999(row?.ains)
+      toAinsInt(row?.ains)
     );
   }
 
@@ -2810,11 +2810,20 @@
   }
 
   function toInt999(value) {
+    return toNonNegativeInt(value, 999);
+  }
+
+  function toAinsInt(value) {
+    return toNonNegativeInt(value);
+  }
+
+  function toNonNegativeInt(value, max) {
     const number = Number(value);
     if (!Number.isFinite(number)) {
       return 0;
     }
-    return Math.max(0, Math.min(999, Math.trunc(number)));
+    const normalized = Math.max(0, Math.trunc(number));
+    return Number.isFinite(max) ? Math.min(max, normalized) : normalized;
   }
 
   function toPositiveInt(value, fallback = 1) {

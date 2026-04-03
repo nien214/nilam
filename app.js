@@ -548,7 +548,7 @@
   }
 
   function computeAinsTotalFromRecord(row) {
-    return clampNilamNumber(row?.ains);
+    return clampAinsNumber(row?.ains);
   }
 
   function computeTotalsMap(records, includeAins) {
@@ -1174,7 +1174,7 @@
     if (!includeAins) {
       return totalWithoutAins;
     }
-    return totalWithoutAins + clampNilamNumber(row?.ains);
+    return totalWithoutAins + clampAinsNumber(row?.ains);
   }
 
   async function fetchTotalsFromSupabase(year, config) {
@@ -1653,7 +1653,7 @@
     const bahanBukanBuku = clampNilamNumber(row?.bahan_bukan_buku);
     const fiksyen = clampNilamNumber(row?.fiksyen);
     const bukanFiksyen = clampNilamNumber(row?.bukan_fiksyen);
-    const ains = clampNilamNumber(row?.ains);
+    const ains = clampAinsNumber(row?.ains);
     const languageValues = resolveLanguageValuesFromGuruType(
       guruType,
       {
@@ -1670,7 +1670,7 @@
     );
     const jumlahAsal = Number(row?.jumlah_aktiviti);
     const jumlahAktiviti = Number.isFinite(jumlahAsal)
-      ? clampNilamNumber(jumlahAsal, 4995)
+      ? clampNonNegativeNumber(jumlahAsal)
       : bahanDigital + bahanBukanBuku + fiksyen + bukanFiksyen + ains;
     const bilFromRow = Number(row?.bil);
     const bil = Number.isFinite(bilFromRow) && bilFromRow > 0 ? Math.trunc(bilFromRow) : bilFallback;
@@ -1699,11 +1699,20 @@
   }
 
   function clampNilamNumber(value, max = 999) {
+    return clampNonNegativeNumber(value, max);
+  }
+
+  function clampAinsNumber(value) {
+    return clampNonNegativeNumber(value);
+  }
+
+  function clampNonNegativeNumber(value, max) {
     const number = Number(value);
     if (!Number.isFinite(number)) {
       return 0;
     }
-    return Math.max(0, Math.min(max, Math.trunc(number)));
+    const normalized = Math.max(0, Math.trunc(number));
+    return Number.isFinite(max) ? Math.min(max, normalized) : normalized;
   }
 
   async function ensureTeacherExistsInSupabase(teacherName, config) {
