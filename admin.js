@@ -96,6 +96,7 @@
     cancelLoginBtn: document.getElementById("cancelLoginBtn"),
     importBtn: document.getElementById("importNamelistBtn"),
     fileInput: document.getElementById("namelistFileInput"),
+    exportNamelistBtn: document.getElementById("exportNamelistBtn"),
     importTeachersBtn: document.getElementById("importTeachersBtn"),
     teachersFileInput: document.getElementById("teachersFileInput"),
     importDataBtn: document.getElementById("importDataBtn"),
@@ -177,6 +178,9 @@
     }
     el.importBtn.addEventListener("click", startImport);
     el.fileInput.addEventListener("change", handleImportFile);
+    if (el.exportNamelistBtn) {
+      el.exportNamelistBtn.addEventListener("click", exportNamelistExcel);
+    }
     if (el.importTeachersBtn) {
       el.importTeachersBtn.addEventListener("click", startImportTeachers);
     }
@@ -881,6 +885,88 @@
     }
     el.teachersFileInput.value = "";
     el.teachersFileInput.click();
+  }
+
+  async function exportNamelistExcel() {
+    try {
+      if (!window.XLSX) {
+        throw new Error("Parser Excel tidak tersedia. Sila refresh halaman dan cuba semula.");
+      }
+      syncTableToState();
+      const namelist = await getExportNamelist();
+      if (!namelist.length) {
+        throw new Error("Tiada senarai nama untuk dieksport.");
+      }
+
+      const rows = namelist
+        .map(normalizeStudentRow)
+        .filter((row) => row.nama || row.kelas || row.no_kad_pengenalan || row.email_google_classroom)
+        .sort((a, b) => {
+          const byClass = a.kelas.localeCompare(b.kelas, "ms");
+          if (byClass !== 0) {
+            return byClass;
+          }
+          return a.nama.localeCompare(b.nama, "ms");
+        });
+
+      const year = String(new Date().getFullYear());
+      downloadNamelistWorkbook(rows, `senarai-nama-murid-${year}.xlsx`);
+      setStatus(`Senarai nama berjaya dieksport: ${rows.length} murid.`);
+    } catch (error) {
+      console.error(error);
+      const message = error.message || "Eksport Senarai Nama gagal.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
+    }
+  }
+
+  async function getExportNamelist() {
+    const current = getCurrentNamelist();
+    if (current.length) {
+      return current;
+    }
+
+    const config = window.NILAM_CONFIG || {};
+    if (config.supabaseUrl && config.supabaseAnonKey) {
+      return fetchStudentsFromSupabase(config, String(new Date().getFullYear()));
+    }
+
+    return [];
+  }
+
+  function downloadNamelistWorkbook(rows, filename) {
+    const headers = ["Nama", "Jantina", "Kelas", "No. Kad Pengenalan", "Email Google Classroom"];
+    const sheetRows = [
+      headers,
+      ...rows.map((row) =>
+        [
+          row.nama,
+          row.jantina,
+          row.kelas,
+          row.no_kad_pengenalan,
+          row.email_google_classroom,
+        ]
+      ),
+    ];
+    const worksheet = window.XLSX.utils.aoa_to_sheet(sheetRows);
+    worksheet["!cols"] = [
+      { wch: 36 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 22 },
+      { wch: 34 },
+    ];
+    rows.forEach((row, index) => {
+      const cellAddress = window.XLSX.utils.encode_cell({ r: index + 1, c: 3 });
+      worksheet[cellAddress] = {
+        t: "s",
+        v: String(row.no_kad_pengenalan || ""),
+        z: "@",
+      };
+    });
+    const workbook = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(workbook, worksheet, "Senarai Nama");
+    window.XLSX.writeFile(workbook, filename);
   }
 
   async function handleImportFile(event) {
