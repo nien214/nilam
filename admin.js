@@ -1278,7 +1278,7 @@
       const parsed = parseImportedAinsRows(rows, year, month);
       if (!parsed.records.length) {
         throw new Error(
-          "Tiada padanan data AINS ditemui. Pastikan Nama Murid sama dengan namelist."
+          "Tiada padanan data AINS ditemui. Pastikan Name/Nama Murid sama dengan namelist."
         );
       }
 
@@ -2173,7 +2173,7 @@
   }
 
   function parseImportedAinsRows(rows, year, month) {
-    const namaColumn = resolveColumnName(rows, ["nama murid", "nama"]);
+    const namaColumn = resolveColumnName(rows, ["name", "nama murid", "nama"]);
     const emailColumn = resolveColumnName(rows, [
       "id delima",
       "id delima murid",
@@ -2182,12 +2182,12 @@
       "email google classroom",
       "email",
     ]);
-    const ainsColumn = resolveColumnName(rows, ["rekod"]);
+    const ainsColumn = resolveColumnName(rows, ["record", "rekod", "point"]);
 
     if (!namaColumn || !ainsColumn) {
       const availableHeaders = rows.length ? Object.keys(rows[0]).join(", ") : "(tiada header)";
       throw new Error(
-        `Kolum fail AINS tidak lengkap. Perlu ada: NAMA MURID dan kolum Rekod. Header dikesan: ${availableHeaders}`
+        `Kolum fail AINS tidak lengkap. Perlu ada: Name/NAMA MURID dan kolum Record/Rekod/Point. Header dikesan: ${availableHeaders}`
       );
     }
 
