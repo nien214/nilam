@@ -850,13 +850,17 @@
       slot.ains = Math.max(slot.ains, Math.max(0, Math.trunc(Number(row.ains || 0))));
     });
 
-    return [...byStudent.values()].map((slot) => ({
-      nama: slot.nama,
-      kelas: slot.kelas,
-      jumlah: slot.bahan + (includeAins ? slot.ains : 0),
-      bahan: slot.bahan,
-      ains: slot.ains,
-    }));
+    return [...byStudent.values()].map((slot) => {
+      const total = slot.bahan + (includeAins ? slot.ains : 0);
+      return {
+        nama: slot.nama,
+        kelas: slot.kelas,
+        jumlah: total,
+        jumlah_bacaan: total,
+        bahan: slot.bahan,
+        ains: slot.ains,
+      };
+    });
   }
 
   function computeJumlahBacaan(row) {
