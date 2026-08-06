@@ -938,7 +938,7 @@
       if (requestSeq !== state.prefillRequestSeq) {
         return;
       }
-      applyTotalsToTable(totals.monthTotals, totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
+      applyMonthlyTotalsToTable(totals.monthTotals);
 
       if (!state.selectedTeacherName || !state.selectedGuruType || !state.selectedDate) {
         setStatus(
@@ -1257,17 +1257,24 @@
     };
   }
 
-  function applyTotalsToTable(monthTotals, yearAinsTotals, yearTotals, allTimeTotals) {
+  function applyMonthlyTotalsToTable(monthTotals) {
     const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
     rows.forEach((row) => {
       const noKad = String(row.dataset.noKad || "").trim();
       const monthCell = row.querySelector('[data-col="jumlah_aktiviti"]');
-      const ainsYearCell = row.querySelector('[data-col="ains_sepanjang_tahun"]');
-      const yrCell = row.querySelector('[data-col="jumlah_tahun"]');
-      const atCell = row.querySelector('[data-col="jumlah_all_time"]');
       if (monthCell) {
         monthCell.textContent = String(monthTotals.get(noKad) || 0);
       }
+    });
+  }
+
+  function applySavedTotalsToTable(yearAinsTotals, yearTotals, allTimeTotals) {
+    const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
+    rows.forEach((row) => {
+      const noKad = String(row.dataset.noKad || "").trim();
+      const ainsYearCell = row.querySelector('[data-col="ains_sepanjang_tahun"]');
+      const yrCell = row.querySelector('[data-col="jumlah_tahun"]');
+      const atCell = row.querySelector('[data-col="jumlah_all_time"]');
       if (ainsYearCell) {
         ainsYearCell.textContent = String(yearAinsTotals.get(noKad) || 0);
       }
@@ -1282,7 +1289,8 @@
 
   async function loadAndApplyTotals(year, config) {
     const totals = await loadTotals(year, config);
-    applyTotalsToTable(totals.monthTotals, totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
+    applyMonthlyTotalsToTable(totals.monthTotals);
+    applySavedTotalsToTable(totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
   }
 
   async function loadSavedRecordsFromSupabase(year, month, kelas, tarikh, namaPengisi, guruType, config) {
