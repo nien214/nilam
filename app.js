@@ -940,7 +940,7 @@
       if (requestSeq !== state.prefillRequestSeq) {
         return;
       }
-      applyTotalsToTable(totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
+      applyTotalsToTable(totals.monthTotals, totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
 
       if (!state.selectedTeacherName || !state.selectedGuruType || !state.selectedDate) {
         setStatus(
@@ -1012,7 +1012,6 @@
       });
       row.dataset.hasSavedSession = "1";
       row.dataset.isDirty = "0";
-      updateJumlahAktiviti(row);
     });
   }
 
@@ -1177,7 +1176,7 @@
     return totalWithoutAins + clampAinsNumber(row?.ains);
   }
 
-  async function fetchTotalsFromSupabase(year, config) {
+  async function fetchTotalsFromSupabase(year, config, filters = {}) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
       select: "no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,jumlah_aktiviti",
@@ -1185,6 +1184,12 @@
     });
     if (year) {
       params.set("tahun", `eq.${year}`);
+    }
+    if (filters.month) {
+      params.set("bulan", `eq.${filters.month}`);
+    }
+    if (filters.kelas) {
+      params.set("kelas", `eq.${filters.kelas}`);
     }
     const response = await fetch(`${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`, {
       cache: "no-store",
@@ -1200,13 +1205,21 @@
   }
 
   async function loadTotals(year, config) {
+    const selectedMonth = String(state.selectedMonth || "").trim();
+    const selectedClass = String(state.selectedClass || "").trim();
+    const shouldLoadMonthTotals = Boolean(selectedMonth && selectedClass);
+
     if (config.supabaseUrl && config.supabaseAnonKey) {
       try {
-        const [yearRecords, allRecords] = await Promise.all([
+        const [yearRecords, allRecords, monthRecords] = await Promise.all([
           fetchTotalsFromSupabase(year, config),
           fetchTotalsFromSupabase(null, config),
+          shouldLoadMonthTotals
+            ? fetchTotalsFromSupabase(year, config, { month: selectedMonth, kelas: selectedClass })
+            : Promise.resolve([]),
         ]);
         return {
+          monthTotals: computeTotalsMap(monthRecords, state.includeAinsInJumlah),
           yearAinsTotals: computeAinsTotalsMap(yearRecords),
           yearTotals: computeTotalsMap(yearRecords, state.includeAinsInJumlah),
           allTimeTotals: computeTotalsMap(allRecords, state.includeAinsInJumlah),
@@ -1214,6 +1227,7 @@
       } catch (error) {
         console.error("Gagal muat jumlah dari Supabase", error);
         return {
+          monthTotals: new Map(),
           yearAinsTotals: new Map(),
           yearTotals: new Map(),
           allTimeTotals: new Map(),
@@ -1222,6 +1236,7 @@
     }
     if (CLOUD_ONLY_MODE) {
       return {
+        monthTotals: new Map(),
         yearAinsTotals: new Map(),
         yearTotals: new Map(),
         allTimeTotals: new Map(),
@@ -1229,20 +1244,33 @@
     }
     const localYearRecords = loadLocalRecordsForYear(year);
     const localAllRecords = loadAllLocalRecords();
+    const localMonthRecords = shouldLoadMonthTotals
+      ? localAllRecords.filter(
+          (row) =>
+            String(row.tahun || "") === String(year) &&
+            String(row.bulan || "") === selectedMonth &&
+            String(row.kelas || "") === selectedClass
+        )
+      : [];
     return {
+      monthTotals: computeTotalsMap(localMonthRecords, state.includeAinsInJumlah),
       yearAinsTotals: computeAinsTotalsMap(localYearRecords),
       yearTotals: computeTotalsMap(localYearRecords, state.includeAinsInJumlah),
       allTimeTotals: computeTotalsMap(localAllRecords, state.includeAinsInJumlah),
     };
   }
 
-  function applyTotalsToTable(yearAinsTotals, yearTotals, allTimeTotals) {
+  function applyTotalsToTable(monthTotals, yearAinsTotals, yearTotals, allTimeTotals) {
     const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
     rows.forEach((row) => {
       const noKad = String(row.dataset.noKad || "").trim();
+      const monthCell = row.querySelector('[data-col="jumlah_aktiviti"]');
       const ainsYearCell = row.querySelector('[data-col="ains_sepanjang_tahun"]');
       const yrCell = row.querySelector('[data-col="jumlah_tahun"]');
       const atCell = row.querySelector('[data-col="jumlah_all_time"]');
+      if (monthCell) {
+        monthCell.textContent = String(monthTotals.get(noKad) || 0);
+      }
       if (ainsYearCell) {
         ainsYearCell.textContent = String(yearAinsTotals.get(noKad) || 0);
       }
@@ -1257,7 +1285,7 @@
 
   async function loadAndApplyTotals(year, config) {
     const totals = await loadTotals(year, config);
-    applyTotalsToTable(totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
+    applyTotalsToTable(totals.monthTotals, totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
   }
 
   async function loadSavedRecordsFromSupabase(year, month, kelas, tarikh, namaPengisi, guruType, config) {
