@@ -1466,6 +1466,14 @@
     const yearRecords = records.filter((row) => String(row?.tahun || "").trim() === year);
     const yearMaterialsByKey = computeMaterialsTotalsByKey(yearRecords);
     const allMaterialsByKey = computeMaterialsTotalsByKey(records);
+    const monthAinsByKey = computeYearAinsMaxByKey(
+      records.filter(
+        (row) =>
+          String(row?.tahun || "").trim() === year &&
+          String(row?.bulan || "").trim() === month &&
+          String(row?.kelas || "").trim() === kelas
+      )
+    );
     const yearAinsByKey = computeYearAinsMaxByKey(yearRecords);
     const allTimeAinsByKey = computeAllTimeAinsSumByKey(records);
 
@@ -1475,13 +1483,13 @@
 
     rows.forEach((row, index) => {
       row.bil = index + 1;
-      recomputeNilamUpdateRow(row);
+      row.ains_bulan_ini = monthAinsByKey.get(row.student_key) || 0;
       row.ains_sepanjang_tahun = yearAinsByKey.get(row.student_key) || 0;
       row.ains_all_time = allTimeAinsByKey.get(row.student_key) || 0;
-      row.year_materials_base = Math.max(0, (yearMaterialsByKey.get(row.student_key) || 0) - row.jumlah_aktiviti);
-      row.all_materials_base = Math.max(0, (allMaterialsByKey.get(row.student_key) || 0) - row.jumlah_aktiviti);
-      row.jumlah_tahun = row.year_materials_base + row.jumlah_aktiviti + row.ains_sepanjang_tahun;
-      row.jumlah_all_time = row.all_materials_base + row.jumlah_aktiviti + row.ains_all_time;
+      const monthMaterials = getMaterialsTotalWithoutAins(row);
+      row.year_materials_base = Math.max(0, (yearMaterialsByKey.get(row.student_key) || 0) - monthMaterials);
+      row.all_materials_base = Math.max(0, (allMaterialsByKey.get(row.student_key) || 0) - monthMaterials);
+      recomputeNilamUpdateRow(row);
     });
 
     return rows;
@@ -1502,6 +1510,7 @@
       bahasa_inggeris: 0,
       lain_lain_bahasa: 0,
       jumlah_aktiviti: 0,
+      ains_bulan_ini: 0,
       ains_sepanjang_tahun: 0,
       ains_all_time: 0,
       year_materials_base: 0,
@@ -1591,9 +1600,38 @@
     row.bahasa_melayu = toInt999(row.bahasa_melayu);
     row.bahasa_inggeris = toInt999(row.bahasa_inggeris);
     row.lain_lain_bahasa = toInt999(row.lain_lain_bahasa);
-    row.jumlah_aktiviti = getMaterialsTotalWithoutAins(row);
-    row.jumlah_tahun = row.year_materials_base + row.jumlah_aktiviti + row.ains_sepanjang_tahun;
-    row.jumlah_all_time = row.all_materials_base + row.jumlah_aktiviti + row.ains_all_time;
+    const monthMaterials = getMaterialsTotalWithoutAins(row);
+    row.jumlah_aktiviti = monthMaterials + toAinsInt(row.ains_bulan_ini);
+    row.jumlah_tahun = row.year_materials_base + monthMaterials + row.ains_sepanjang_tahun;
+    row.jumlah_all_time = row.all_materials_base + monthMaterials + row.ains_all_time;
+  }
+
+  async function fetchAllSupabaseRows(endpoint, headers, pageSize = 1000) {
+    const rows = [];
+    const step = Math.max(1, Math.trunc(Number(pageSize) || 1000));
+    let offset = 0;
+    while (true) {
+      const separator = endpoint.includes("?") ? "&" : "?";
+      const response = await fetch(`${endpoint}${separator}offset=${offset}&limit=${step}`, {
+        method: "GET",
+        cache: "no-store",
+        headers,
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`Ralat muat rekod Supabase (${response.status}): ${detail}`);
+      }
+      const page = await response.json();
+      if (!Array.isArray(page) || !page.length) {
+        break;
+      }
+      rows.push(...page);
+      if (page.length < step) {
+        break;
+      }
+      offset += step;
+    }
+    return rows;
   }
 
   function renderNilamUpdateTable() {
@@ -1703,22 +1741,13 @@
     const params = new URLSearchParams({
       select:
         "id,tahun,bulan,tarikh,nama_pengisi,guru,bil,no_kad_pengenalan,nama,kelas,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,jumlah_aktiviti,updated_at_client",
-      limit: "50000",
-      order: "updated_at_client.desc",
+      order: "id.asc",
     });
     const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
-    const response = await fetch(endpoint, {
-      method: "GET",
-      headers: {
-        apikey: config.supabaseAnonKey,
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
-      },
+    const rows = await fetchAllSupabaseRows(endpoint, {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
     });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Ralat muat rekod Supabase (${response.status}): ${detail}`);
-    }
-    const rows = await response.json();
     if (!Array.isArray(rows)) {
       return [];
     }
@@ -1902,21 +1931,13 @@
       tahun: `eq.${year}`,
       bulan: `eq.${month}`,
       kelas: `eq.${kelas}`,
-      limit: "50000",
+      order: "id.asc",
     });
     const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
-    const response = await fetch(endpoint, {
-      method: "GET",
-      headers: {
-        apikey: config.supabaseAnonKey,
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
-      },
+    const rows = await fetchAllSupabaseRows(endpoint, {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
     });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Semakan rekod Supabase untuk kemas kini Nilam gagal (${response.status}): ${detail}`);
-    }
-    const rows = await response.json();
     const normalized = [];
     (Array.isArray(rows) ? rows : []).forEach((row) => {
       const clean = normalizeImportedRecord(row, "");

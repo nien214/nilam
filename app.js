@@ -575,10 +575,8 @@
   }
 
   function getRecordTotalForAggregation(record, includeAins = false) {
-    const persistedTotal = Number(record?.jumlah_aktiviti);
-    if (Number.isFinite(persistedTotal) && persistedTotal >= 0) {
-      return includeAins ? persistedTotal + computeAinsTotalFromRecord(record) : persistedTotal;
-    }
+    // The four material columns are the canonical reading count. Older imports
+    // may contain a stale jumlah_aktiviti (or one that already included AINS).
     const baseTotal = computeJumlahBacaanFromRecord(record, false);
     return includeAins ? baseTotal + computeAinsTotalFromRecord(record) : baseTotal;
   }
@@ -945,11 +943,30 @@
         throw new Error(`Ralat simpanan Supabase (${response.status}): ${detail}`);
       }
 
-      setStatus(`Berjaya simpan ${records.length} rekod ke Supabase.`);
+      const savedRows = await response.json();
+      if (!Array.isArray(savedRows) || savedRows.length !== records.length) {
+        throw new Error(
+          `Supabase hanya mengesahkan ${Array.isArray(savedRows) ? savedRows.length : 0} daripada ${records.length} rekod.`
+        );
+      }
+      const expectedKeys = new Set(records.map(getSessionRecordKey));
+      const confirmedKeys = new Set(savedRows.map(getSessionRecordKey));
+      const missingConfirmation = [...expectedKeys].find((key) => key && !confirmedKeys.has(key));
+      if (missingConfirmation) {
+        throw new Error("Tarikh atau butiran sesi yang dikembalikan Supabase tidak sepadan dengan rekod dihantar.");
+      }
+
+      recalculateVisibleJumlahAktiviti();
+      let totalsWarning = "";
+      try {
+        await loadAndApplyTotals(state.selectedYear, config);
+      } catch (totalsError) {
+        console.error("Rekod disimpan tetapi jumlah paparan gagal dimuat semula", totalsError);
+        totalsWarning = " Muat semula halaman untuk melihat jumlah terkini.";
+      }
+      setStatus(`Berjaya simpan ${savedRows.length} rekod ke Supabase.${totalsWarning}`);
       showToast("Berjaya disimpan");
       showPopupStatus("Berjaya disimpan", false);
-      recalculateVisibleJumlahAktiviti();
-      await loadAndApplyTotals(state.selectedYear, config);
 
       // Optional debug verification: fetch back the saved records and log mismatches
       if (config.debugSaveVerify) {
@@ -1239,27 +1256,53 @@
     return totalWithoutAins + clampAinsNumber(row?.ains);
   }
 
+  async function fetchAllSupabaseRows(endpoint, headers, pageSize = 1000) {
+    const rows = [];
+    const step = Math.max(1, Math.trunc(Number(pageSize) || 1000));
+    let offset = 0;
+
+    // PostgREST caps a single response (currently 1000 rows on this project).
+    // Page explicitly so newer records are never omitted from displayed totals.
+    while (true) {
+      const separator = endpoint.includes("?") ? "&" : "?";
+      const pagedEndpoint = `${endpoint}${separator}offset=${offset}&limit=${step}`;
+      const response = await fetch(pagedEndpoint, {
+        method: "GET",
+        cache: "no-store",
+        headers,
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`Ralat muat jumlah Supabase (${response.status}): ${detail}`);
+      }
+      const page = await response.json();
+      if (!Array.isArray(page) || !page.length) {
+        break;
+      }
+      rows.push(...page);
+      if (page.length < step) {
+        break;
+      }
+      offset += step;
+    }
+    return rows;
+  }
+
   async function fetchTotalsFromSupabase(year, config) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
       select:
-        "no_kad_pengenalan,tahun,bulan,kelas,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,jumlah_aktiviti",
-      limit: "10000",
+        "id,no_kad_pengenalan,tahun,bulan,kelas,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,jumlah_aktiviti",
+      order: "id.asc",
     });
     if (year) {
       params.set("tahun", `eq.${year}`);
     }
-    const response = await fetch(`${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`, {
-      cache: "no-store",
-      headers: {
-        apikey: config.supabaseAnonKey,
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
-      },
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
+    return fetchAllSupabaseRows(endpoint, {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
     });
-    if (!response.ok) {
-      throw new Error(`Ralat muat jumlah Supabase (${response.status})`);
-    }
-    return response.json();
   }
 
   function matchesSelectedMonthAndClass(row, year, month, kelas) {
