@@ -544,7 +544,7 @@
       bukan_fiksyen: getNumberFromCell(row, "bukan_fiksyen"),
       ains: 0,
     }, false);
-    row.querySelector('[data-col="jumlah_aktiviti"]').textContent = String(total);
+    row.dataset.currentJumlahAktiviti = String(total);
   }
 
   function computeAinsTotalFromRecord(row) {
@@ -692,9 +692,7 @@
           lain_lain_bahasa: getNumberFromCell(row, "lain_lain_bahasa"),
         }
       );
-      const jumlahAktiviti = Number(
-        row.querySelector('[data-col="jumlah_aktiviti"]').textContent || "0"
-      );
+      const jumlahAktiviti = Number(row.dataset.currentJumlahAktiviti || "0");
       const record = {
         no_kad_pengenalan: noKad,
         tahun: state.selectedYear,
@@ -1176,20 +1174,15 @@
     return totalWithoutAins + clampAinsNumber(row?.ains);
   }
 
-  async function fetchTotalsFromSupabase(year, config, filters = {}) {
+  async function fetchTotalsFromSupabase(year, config) {
     const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
     const params = new URLSearchParams({
-      select: "no_kad_pengenalan,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,jumlah_aktiviti",
+      select:
+        "no_kad_pengenalan,tahun,bulan,kelas,bahan_digital,bahan_bukan_buku,fiksyen,bukan_fiksyen,ains,jumlah_aktiviti",
       limit: "10000",
     });
     if (year) {
       params.set("tahun", `eq.${year}`);
-    }
-    if (filters.month) {
-      params.set("bulan", `eq.${filters.month}`);
-    }
-    if (filters.kelas) {
-      params.set("kelas", `eq.${filters.kelas}`);
     }
     const response = await fetch(`${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`, {
       cache: "no-store",
@@ -1204,6 +1197,15 @@
     return response.json();
   }
 
+  function matchesSelectedMonthAndClass(row, year, month, kelas) {
+    const recordYear = String(row?.tahun || "").trim();
+    const recordMonth = String(row?.bulan || "").trim().toLowerCase();
+    const recordClass = String(row?.kelas || "").trim().toLowerCase();
+    const selectedMonth = String(month || "").trim().toLowerCase();
+    const selectedClass = String(kelas || "").trim().toLowerCase();
+    return (!year || recordYear === String(year).trim()) && recordMonth === selectedMonth && recordClass === selectedClass;
+  }
+
   async function loadTotals(year, config) {
     const selectedMonth = String(state.selectedMonth || "").trim();
     const selectedClass = String(state.selectedClass || "").trim();
@@ -1211,13 +1213,13 @@
 
     if (config.supabaseUrl && config.supabaseAnonKey) {
       try {
-        const [yearRecords, allRecords, monthRecords] = await Promise.all([
+        const [yearRecords, allRecords] = await Promise.all([
           fetchTotalsFromSupabase(year, config),
           fetchTotalsFromSupabase(null, config),
-          shouldLoadMonthTotals
-            ? fetchTotalsFromSupabase(year, config, { month: selectedMonth, kelas: selectedClass })
-            : Promise.resolve([]),
         ]);
+        const monthRecords = shouldLoadMonthTotals
+          ? yearRecords.filter((row) => matchesSelectedMonthAndClass(row, year, selectedMonth, selectedClass))
+          : [];
         return {
           monthTotals: computeTotalsMap(monthRecords, state.includeAinsInJumlah),
           yearAinsTotals: computeAinsTotalsMap(yearRecords),
@@ -1245,12 +1247,7 @@
     const localYearRecords = loadLocalRecordsForYear(year);
     const localAllRecords = loadAllLocalRecords();
     const localMonthRecords = shouldLoadMonthTotals
-      ? localAllRecords.filter(
-          (row) =>
-            String(row.tahun || "") === String(year) &&
-            String(row.bulan || "") === selectedMonth &&
-            String(row.kelas || "") === selectedClass
-        )
+      ? localAllRecords.filter((row) => matchesSelectedMonthAndClass(row, year, selectedMonth, selectedClass))
       : [];
     return {
       monthTotals: computeTotalsMap(localMonthRecords, state.includeAinsInJumlah),
