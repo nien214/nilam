@@ -438,7 +438,22 @@
   async function renderTableAndPrefill() {
     await refreshStudentsPreserveSelectedClass();
     renderTable();
+    await refreshDisplayedTotals();
     await prefillSavedValuesForSelection();
+  }
+
+  async function refreshDisplayedTotals() {
+    if (!state.selectedClass || !state.selectedMonth) {
+      return;
+    }
+    const config = window.NILAM_CONFIG || {};
+    try {
+      const totals = await loadTotals(state.selectedYear, config);
+      applyMonthlyTotalsToTable(totals.monthTotals);
+      applySavedTotalsToTable(totals.yearAinsTotals, totals.yearTotals, totals.allTimeTotals);
+    } catch (error) {
+      console.error("Gagal muat jumlah paparan", error);
+    }
   }
 
   function renderTable() {
@@ -474,10 +489,10 @@
             <td>${numericInput("bahasa_melayu")}</td>
             <td>${numericInput("bahasa_inggeris")}</td>
             <td>${numericInput("lain_lain_bahasa")}</td>
-            <td><span class="cell-total" data-col="jumlah_aktiviti">0</span></td>
-            <td><span class="cell-total" data-col="ains_sepanjang_tahun">0</span></td>
-            <td><span class="cell-total" data-col="jumlah_tahun">0</span></td>
-            <td><span class="cell-total" data-col="jumlah_all_time">0</span></td>
+            <td><span class="cell-total" data-col="jumlah_aktiviti"></span></td>
+            <td><span class="cell-total" data-col="ains_sepanjang_tahun"></span></td>
+            <td><span class="cell-total" data-col="jumlah_tahun"></span></td>
+            <td><span class="cell-total" data-col="jumlah_all_time"></span></td>
           </tr>
         `;
       })
@@ -555,11 +570,13 @@
     const materialsByStudent = new Map();
     (Array.isArray(records) ? records : []).forEach((r) => {
       const noKad = String(r.no_kad_pengenalan || "").trim();
-      if (!noKad) {
+      const nameKey = normalizeNameKey(r.nama || "");
+      const key = noKad || nameKey;
+      if (!key) {
         return;
       }
       const materials = computeJumlahBacaanFromRecord(r, false);
-      materialsByStudent.set(noKad, (materialsByStudent.get(noKad) || 0) + materials);
+      materialsByStudent.set(key, (materialsByStudent.get(key) || 0) + materials);
     });
 
     if (!includeAins) {
@@ -568,8 +585,8 @@
 
     const ainsAnnualByStudent = computeAnnualAinsTotalsMap(records);
     const merged = new Map(materialsByStudent);
-    ainsAnnualByStudent.forEach((ains, noKad) => {
-      merged.set(noKad, (merged.get(noKad) || 0) + ains);
+    ainsAnnualByStudent.forEach((ains, key) => {
+      merged.set(key, (merged.get(key) || 0) + ains);
     });
     return merged;
   }
@@ -578,15 +595,17 @@
     const map = new Map();
     (Array.isArray(records) ? records : []).forEach((r) => {
       const noKad = String(r.no_kad_pengenalan || "").trim();
-      if (!noKad) {
+      const nameKey = normalizeNameKey(r.nama || "");
+      const key = noKad || nameKey;
+      if (!key) {
         return;
       }
-      const current = map.get(noKad) || 0;
+      const current = map.get(key) || 0;
       const next = computeAinsTotalFromRecord(r);
       if (next > current) {
-        map.set(noKad, next);
-      } else if (!map.has(noKad)) {
-        map.set(noKad, current);
+        map.set(key, next);
+      } else if (!map.has(key)) {
+        map.set(key, current);
       }
     });
     return map;
@@ -596,11 +615,13 @@
     const maxByStudentYear = new Map();
     (Array.isArray(records) ? records : []).forEach((r) => {
       const noKad = String(r.no_kad_pengenalan || "").trim();
+      const nameKey = normalizeNameKey(r.nama || "");
       const tahun = String(r.tahun || "").trim();
-      if (!noKad) {
+      const keySource = noKad || nameKey;
+      if (!keySource || !tahun) {
         return;
       }
-      const key = `${noKad}|${tahun}`;
+      const key = `${keySource}|${tahun}`;
       const next = computeAinsTotalFromRecord(r);
       const current = maxByStudentYear.get(key) || 0;
       if (next > current) {
@@ -613,8 +634,8 @@
     const sumByStudent = new Map();
     maxByStudentYear.forEach((ains, key) => {
       const sepIndex = key.indexOf("|");
-      const noKad = sepIndex >= 0 ? key.slice(0, sepIndex) : key;
-      sumByStudent.set(noKad, (sumByStudent.get(noKad) || 0) + ains);
+      const studentKey = sepIndex >= 0 ? key.slice(0, sepIndex) : key;
+      sumByStudent.set(studentKey, (sumByStudent.get(studentKey) || 0) + ains);
     });
     return sumByStudent;
   }
@@ -1257,14 +1278,24 @@
     };
   }
 
+  function resolveTotalsValue(row, totalsMap) {
+    const noKad = String(row.dataset.noKad || "").trim();
+    if (noKad && totalsMap.has(noKad)) {
+      return String(totalsMap.get(noKad) || 0);
+    }
+    const nameKey = normalizeNameKey(String(row.dataset.nama || ""));
+    if (nameKey && totalsMap.has(nameKey)) {
+      return String(totalsMap.get(nameKey) || 0);
+    }
+    return "0";
+  }
+
   function applyMonthlyTotalsToTable(monthTotals) {
     const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
     rows.forEach((row) => {
-      const noKad = String(row.dataset.noKad || "").trim();
       const monthCell = row.querySelector('[data-col="jumlah_aktiviti"]');
       if (monthCell) {
-        const value = monthTotals.has(noKad) ? String(monthTotals.get(noKad) || 0) : "0";
-        monthCell.textContent = value;
+        monthCell.textContent = resolveTotalsValue(row, monthTotals);
       }
     });
   }
@@ -1272,21 +1303,17 @@
   function applySavedTotalsToTable(yearAinsTotals, yearTotals, allTimeTotals) {
     const rows = [...el.tbody.querySelectorAll("tr[data-row-id]")];
     rows.forEach((row) => {
-      const noKad = String(row.dataset.noKad || "").trim();
       const ainsYearCell = row.querySelector('[data-col="ains_sepanjang_tahun"]');
       const yrCell = row.querySelector('[data-col="jumlah_tahun"]');
       const atCell = row.querySelector('[data-col="jumlah_all_time"]');
       if (ainsYearCell) {
-        const value = yearAinsTotals.has(noKad) ? String(yearAinsTotals.get(noKad) || 0) : "0";
-        ainsYearCell.textContent = value;
+        ainsYearCell.textContent = resolveTotalsValue(row, yearAinsTotals);
       }
       if (yrCell) {
-        const value = yearTotals.has(noKad) ? String(yearTotals.get(noKad) || 0) : "0";
-        yrCell.textContent = value;
+        yrCell.textContent = resolveTotalsValue(row, yearTotals);
       }
       if (atCell) {
-        const value = allTimeTotals.has(noKad) ? String(allTimeTotals.get(noKad) || 0) : "0";
-        atCell.textContent = value;
+        atCell.textContent = resolveTotalsValue(row, allTimeTotals);
       }
     });
   }
