@@ -562,8 +562,25 @@
     row.dataset.currentJumlahAktiviti = String(total);
   }
 
+  function applySavedBaselineToVisibleTotals(row) {
+    if (!row) {
+      return;
+    }
+    updateJumlahAktiviti(row);
+    row.dataset.savedJumlahAktiviti = row.dataset.currentJumlahAktiviti || "0";
+  }
+
   function computeAinsTotalFromRecord(row) {
     return clampAinsNumber(row?.ains);
+  }
+
+  function getRecordTotalForAggregation(record, includeAins = false) {
+    const persistedTotal = Number(record?.jumlah_aktiviti);
+    if (Number.isFinite(persistedTotal) && persistedTotal >= 0) {
+      return includeAins ? persistedTotal + computeAinsTotalFromRecord(record) : persistedTotal;
+    }
+    const baseTotal = computeJumlahBacaanFromRecord(record, false);
+    return includeAins ? baseTotal + computeAinsTotalFromRecord(record) : baseTotal;
   }
 
   function computeTotalsMap(records, includeAins) {
@@ -575,7 +592,7 @@
       if (!key) {
         return;
       }
-      const materials = computeJumlahBacaanFromRecord(r, false);
+      const materials = getRecordTotalForAggregation(r, false);
       materialsByStudent.set(key, (materialsByStudent.get(key) || 0) + materials);
     });
 
@@ -916,7 +933,8 @@
       setStatus(`Berjaya simpan ${records.length} rekod ke Supabase.`);
       showToast("Berjaya disimpan");
       showPopupStatus("Berjaya disimpan", false);
-      loadAndApplyTotals(state.selectedYear, config).catch(() => {});
+      recalculateVisibleJumlahAktiviti();
+      await loadAndApplyTotals(state.selectedYear, config);
     } catch (error) {
       console.error(error);
       const message = `Simpanan ke Supabase gagal (cloud-only, tiada simpanan offline). (${String(
@@ -925,6 +943,7 @@
       setStatus(message, true);
       showToast("Simpanan gagal", true);
       showPopupStatus(message, true);
+      recalculateVisibleJumlahAktiviti();
       loadAndApplyTotals(state.selectedYear, config).catch(() => {});
     }
   }
@@ -1031,6 +1050,7 @@
       });
       row.dataset.hasSavedSession = "1";
       row.dataset.isDirty = "0";
+      applySavedBaselineToVisibleTotals(row);
     });
   }
 
