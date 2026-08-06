@@ -730,7 +730,14 @@
           lain_lain_bahasa: getNumberFromCell(row, "lain_lain_bahasa"),
         }
       );
-      const jumlahAktiviti = Number(row.dataset.currentJumlahAktiviti || "0");
+      // Compute jumlah_aktiviti from the current numeric inputs (do not rely on dataset which can be stale)
+      const jumlahAktiviti = computeJumlahBacaanFromRecord({
+        bahan_digital: bahanDigital,
+        bahan_bukan_buku: bahanBukanBuku,
+        fiksyen: fiksyen,
+        bukan_fiksyen: bukanFiksyen,
+        ains: 0,
+      }, false);
       const record = {
         no_kad_pengenalan: noKad,
         tahun: state.selectedYear,
@@ -914,6 +921,14 @@
       }
       await ensureStudentsExistInSupabase(records, config);
 
+      if (config.debugEnable) {
+        try {
+          console.info("[NILAM DEBUG] Payload to Supabase:", JSON.stringify(records));
+        } catch (e) {
+          console.info("[NILAM DEBUG] Payload to Supabase (could not stringify)");
+        }
+      }
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -935,6 +950,15 @@
       showPopupStatus("Berjaya disimpan", false);
       recalculateVisibleJumlahAktiviti();
       await loadAndApplyTotals(state.selectedYear, config);
+
+      // Optional debug verification: fetch back the saved records and log mismatches
+      if (config.debugSaveVerify) {
+        try {
+          await verifySavedRecords(records, config);
+        } catch (err) {
+          console.error("Gagal verify rekod selepas simpan:", err);
+        }
+      }
     } catch (error) {
       console.error(error);
       const message = `Simpanan ke Supabase gagal (cloud-only, tiada simpanan offline). (${String(
@@ -1861,6 +1885,68 @@
     if (!response.ok) {
       const detail = await response.text();
       throw new Error(`Ralat sync nilam_students (${response.status}): ${detail}`);
+    }
+  }
+
+  // Verify that saved records appear in Supabase (debug helper). Only used when
+  // `NILAM_CONFIG.debugSaveVerify` is true to avoid extra network calls.
+  async function verifySavedRecords(records, config) {
+    if (!Array.isArray(records) || !records.length) return;
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const year = encodeURIComponent(String(state.selectedYear || ""));
+    const month = encodeURIComponent(String(state.selectedMonth || ""));
+    const tarikh = encodeURIComponent(String(state.selectedDate || ""));
+
+    // Build a list of unique no_kad_pengenalan from the payload
+    const nos = [...new Set(records.map((r) => String(r.no_kad_pengenalan || "").trim()).filter(Boolean))];
+    if (!nos.length) {
+      console.info("[NILAM DEBUG] No ICs in payload to verify.");
+      return;
+    }
+
+    // Use Supabase REST 'in' operator to fetch any matching records for this session
+    const noParam = `no_kad_pengenalan=in.(${nos.map((s) => encodeURIComponent(s)).join(',')})`;
+    const params = `select=no_kad_pengenalan,jumlah_aktiviti,tahun,bulan,tarikh&tahun=eq.${year}&bulan=eq.${month}&tarikh=eq.${tarikh}&${noParam}&limit=1000`;
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params}`;
+
+    const resp = await fetch(endpoint, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+      },
+    });
+    if (!resp.ok) {
+      const detail = await resp.text();
+      throw new Error(`Ralat verify Supabase (${resp.status}): ${detail}`);
+    }
+    const found = await resp.json();
+    console.info(`[NILAM DEBUG] verifySavedRecords found ${found.length} rows for ${nos.length} IC(s)`);
+
+    // Check for each payload record whether a matching record with non-zero jumlah exists
+    const foundMap = new Map();
+    (Array.isArray(found) ? found : []).forEach((r) => {
+      foundMap.set(String(r.no_kad_pengenalan || "").trim(), Number(r.jumlah_aktiviti) || 0);
+    });
+
+    const problems = [];
+    records.forEach((r) => {
+      const no = String(r.no_kad_pengenalan || "").trim();
+      const expected = Number(r.jumlah_aktiviti) || 0;
+      const actual = foundMap.has(no) ? foundMap.get(no) : null;
+      if (actual === null) {
+        problems.push(`Tiada rekod ditemui untuk ${no} (nama: ${r.nama})`);
+      } else if (actual < expected) {
+        problems.push(`Jumlah mismatch untuk ${no}: dijangka ${expected}, ditemui ${actual}`);
+      }
+    });
+
+    if (problems.length) {
+      console.warn("[NILAM DEBUG] verifySavedRecords problems:\n" + problems.slice(0, 50).join("\n"));
+      window.alert("Debug: masalah ditemui selepas simpan. Semak konsol untuk butiran.");
+    } else {
+      console.info("[NILAM DEBUG] Semua rekod yang disimpan disahkan wujud dan jumlah sepadan.");
     }
   }
 
