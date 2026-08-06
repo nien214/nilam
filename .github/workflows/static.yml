@@ -34,7 +34,9 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
+        # v4 can create duplicate same-name artifacts when GitHub retries an
+        # upload; deploy-pages then aborts because it cannot choose one.
+        uses: actions/upload-pages-artifact@v3
         with:
           # Upload entire repository
           path: '.'
