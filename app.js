@@ -475,9 +475,9 @@
             <td>${numericInput("bahasa_inggeris")}</td>
             <td>${numericInput("lain_lain_bahasa")}</td>
             <td><span class="cell-total" data-col="jumlah_aktiviti">0</span></td>
-            <td><span class="cell-total" data-col="ains_sepanjang_tahun">—</span></td>
-            <td><span class="cell-total" data-col="jumlah_tahun">—</span></td>
-            <td><span class="cell-total" data-col="jumlah_all_time">—</span></td>
+            <td><span class="cell-total" data-col="ains_sepanjang_tahun">0</span></td>
+            <td><span class="cell-total" data-col="jumlah_tahun">0</span></td>
+            <td><span class="cell-total" data-col="jumlah_all_time">0</span></td>
           </tr>
         `;
       })
@@ -1263,7 +1263,8 @@
       const noKad = String(row.dataset.noKad || "").trim();
       const monthCell = row.querySelector('[data-col="jumlah_aktiviti"]');
       if (monthCell) {
-        monthCell.textContent = String(monthTotals.get(noKad) || 0);
+        const value = monthTotals.has(noKad) ? String(monthTotals.get(noKad) || 0) : "0";
+        monthCell.textContent = value;
       }
     });
   }
@@ -1276,13 +1277,16 @@
       const yrCell = row.querySelector('[data-col="jumlah_tahun"]');
       const atCell = row.querySelector('[data-col="jumlah_all_time"]');
       if (ainsYearCell) {
-        ainsYearCell.textContent = String(yearAinsTotals.get(noKad) || 0);
+        const value = yearAinsTotals.has(noKad) ? String(yearAinsTotals.get(noKad) || 0) : "0";
+        ainsYearCell.textContent = value;
       }
       if (yrCell) {
-        yrCell.textContent = String(yearTotals.get(noKad) || 0);
+        const value = yearTotals.has(noKad) ? String(yearTotals.get(noKad) || 0) : "0";
+        yrCell.textContent = value;
       }
       if (atCell) {
-        atCell.textContent = String(allTimeTotals.get(noKad) || 0);
+        const value = allTimeTotals.has(noKad) ? String(allTimeTotals.get(noKad) || 0) : "0";
+        atCell.textContent = value;
       }
     });
   }
