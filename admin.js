@@ -6,6 +6,7 @@
   const AUTH_SESSION_KEY = "nilam_admin_auth_v1";
   const NAMELIST_OVERRIDE_KEY = "nilam_students_override_v1";
   const TEACHER_NAMES_KEY = "nilam_teacher_names_v1";
+  const NILAM_EXPORT_TEMPLATE_URL = "template-perekodan-nilam-2026.xlsx";
 
 
   const CLOUD_ONLY_MODE = true;
@@ -97,6 +98,12 @@
     importBtn: document.getElementById("importNamelistBtn"),
     fileInput: document.getElementById("namelistFileInput"),
     exportNamelistBtn: document.getElementById("exportNamelistBtn"),
+    exportNilamBtn: document.getElementById("exportNilamBtn"),
+    exportNilamModal: document.getElementById("exportNilamModal"),
+    exportNilamStartDate: document.getElementById("exportNilamStartDate"),
+    exportNilamEndDate: document.getElementById("exportNilamEndDate"),
+    confirmExportNilamBtn: document.getElementById("confirmExportNilamBtn"),
+    cancelExportNilamBtn: document.getElementById("cancelExportNilamBtn"),
     importTeachersBtn: document.getElementById("importTeachersBtn"),
     teachersFileInput: document.getElementById("teachersFileInput"),
     importDataBtn: document.getElementById("importDataBtn"),
@@ -180,6 +187,19 @@
     el.fileInput.addEventListener("change", handleImportFile);
     if (el.exportNamelistBtn) {
       el.exportNamelistBtn.addEventListener("click", exportNamelistExcel);
+    }
+    if (el.exportNilamBtn) {
+      el.exportNilamBtn.addEventListener("click", openExportNilamDialog);
+    }
+    if (el.confirmExportNilamBtn) {
+      el.confirmExportNilamBtn.addEventListener("click", exportNilamExcel);
+    }
+    if (el.cancelExportNilamBtn) {
+      el.cancelExportNilamBtn.addEventListener("click", closeExportNilamDialog);
+    }
+    if (el.exportNilamModal) {
+      el.exportNilamModal.addEventListener("click", handleExportNilamModalClick);
+      el.exportNilamModal.addEventListener("keydown", handleExportNilamModalKeydown);
     }
     if (el.importTeachersBtn) {
       el.importTeachersBtn.addEventListener("click", startImportTeachers);
@@ -885,6 +905,171 @@
     }
     el.teachersFileInput.value = "";
     el.teachersFileInput.click();
+  }
+
+  function currentLocalIsoDate() {
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function openExportNilamDialog() {
+    if (!el.exportNilamModal) {
+      setStatus("Dialog eksport Data NILAM tidak ditemui.", true);
+      return;
+    }
+    const today = currentLocalIsoDate();
+    if (el.exportNilamStartDate && !el.exportNilamStartDate.value) {
+      el.exportNilamStartDate.value = `${today.slice(0, 4)}-01-01`;
+    }
+    if (el.exportNilamEndDate && !el.exportNilamEndDate.value) {
+      el.exportNilamEndDate.value = today;
+    }
+    el.exportNilamModal.hidden = false;
+    if (el.exportNilamStartDate) {
+      el.exportNilamStartDate.focus();
+    }
+  }
+
+  function closeExportNilamDialog() {
+    if (el.exportNilamModal) {
+      el.exportNilamModal.hidden = true;
+    }
+  }
+
+  function handleExportNilamModalClick(event) {
+    if (event.target === el.exportNilamModal) {
+      closeExportNilamDialog();
+    }
+  }
+
+  function handleExportNilamModalKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeExportNilamDialog();
+    }
+  }
+
+  async function exportNilamExcel() {
+    const startDate = String(el.exportNilamStartDate?.value || "").trim();
+    const endDate = String(el.exportNilamEndDate?.value || "").trim();
+    const exportApi = window.NILAM_EXPORT;
+    const originalButtonText = el.confirmExportNilamBtn?.textContent || "Eksport Excel";
+
+    try {
+      if (!window.XLSX || !exportApi) {
+        throw new Error("Fungsi eksport Excel tidak tersedia. Sila refresh halaman dan cuba semula.");
+      }
+      if (!exportApi.isIsoDate(startDate) || !exportApi.isIsoDate(endDate)) {
+        throw new Error("Sila pilih tarikh mula dan tarikh akhir.");
+      }
+      if (startDate > endDate) {
+        throw new Error("Tarikh mula tidak boleh selepas tarikh akhir.");
+      }
+
+      const config = window.NILAM_CONFIG || {};
+      if (!config.supabaseUrl || !config.supabaseAnonKey) {
+        throw new Error("Cloud-only mode memerlukan konfigurasi Supabase dalam config.js.");
+      }
+
+      if (el.confirmExportNilamBtn) {
+        el.confirmExportNilamBtn.disabled = true;
+        el.confirmExportNilamBtn.textContent = "Menyediakan...";
+      }
+      setStatus(`Menyediakan eksport Data NILAM dari ${startDate} hingga ${endDate}...`);
+
+      const [records, students] = await Promise.all([
+        fetchNilamRecordsForExport(config, startDate, endDate),
+        fetchStudentsFromSupabase(config, endDate.slice(0, 4)),
+      ]);
+      const rows = exportApi.aggregateRows(records, students, startDate, endDate);
+      if (!rows.length) {
+        throw new Error("Tiada murid dengan rekod bacaan dalam julat tarikh dipilih.");
+      }
+
+      await downloadNilamExportWorkbook(rows, `data-nilam-${startDate}-hingga-${endDate}.xlsx`);
+      closeExportNilamDialog();
+      setStatus(`Data NILAM berjaya dieksport: ${rows.length} murid.`);
+    } catch (error) {
+      console.error(error);
+      const message = error.message || "Eksport Data NILAM gagal.";
+      setStatus(message, true);
+      showPopupStatus(message, true);
+    } finally {
+      if (el.confirmExportNilamBtn) {
+        el.confirmExportNilamBtn.disabled = false;
+        el.confirmExportNilamBtn.textContent = originalButtonText;
+      }
+    }
+  }
+
+  async function fetchNilamRecordsForExport(config, startDate, endDate) {
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const params = new URLSearchParams({
+      select:
+        "id,tarikh,no_kad_pengenalan,nama,kelas,bahasa_melayu,bahasa_inggeris,lain_lain_bahasa,ains,updated_at_client",
+      tarikh: `gte.${startDate}`,
+      order: "tarikh.asc,id.asc",
+    });
+    params.append("tarikh", `lte.${endDate}`);
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
+    return fetchAllSupabaseRows(endpoint, {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
+    });
+  }
+
+  async function downloadNilamExportWorkbook(rows, filename) {
+    const response = await fetch(NILAM_EXPORT_TEMPLATE_URL, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Templat eksport Excel gagal dimuatkan (${response.status}).`);
+    }
+
+    const workbook = window.XLSX.read(await response.arrayBuffer(), {
+      type: "array",
+      cellStyles: true,
+    });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) {
+      throw new Error("Templat eksport Excel tidak mempunyai lembaran kerja.");
+    }
+
+    const expectedHeaders = ["Bil", "Nama Murid", "ID DELIMa", "Kelas", "Bil Bahan Bacaan"];
+    expectedHeaders.forEach((header, index) => {
+      const address = window.XLSX.utils.encode_cell({ r: 6, c: index });
+      if (String(worksheet[address]?.v || "").trim() !== header) {
+        throw new Error("Header baris 7 dalam templat eksport Excel tidak sah.");
+      }
+    });
+
+    const templateStyles = expectedHeaders.map((_, columnIndex) => {
+      const address = window.XLSX.utils.encode_cell({ r: 7, c: columnIndex });
+      return worksheet[address]?.s;
+    });
+    worksheet["!cols"] = worksheet["!cols"] || [];
+    worksheet["!cols"][2] = { wch: 32 };
+
+    rows.forEach((row, rowIndex) => {
+      const excelRowIndex = rowIndex + 7;
+      const values = [row.bil, row.nama, row.id_delima, row.kelas, row.bil_bahan_bacaan];
+      values.forEach((value, columnIndex) => {
+        const address = window.XLSX.utils.encode_cell({ r: excelRowIndex, c: columnIndex });
+        worksheet[address] = {
+          t: columnIndex === 0 || columnIndex === 4 ? "n" : "s",
+          v: columnIndex === 0 || columnIndex === 4 ? Number(value) : String(value || ""),
+        };
+        if (templateStyles[columnIndex] !== undefined) {
+          worksheet[address].s = templateStyles[columnIndex];
+        }
+      });
+    });
+
+    const existingRange = window.XLSX.utils.decode_range(worksheet["!ref"] || "A1:E8");
+    existingRange.e.r = Math.max(existingRange.e.r, rows.length + 6);
+    existingRange.e.c = Math.max(existingRange.e.c, 4);
+    worksheet["!ref"] = window.XLSX.utils.encode_range(existingRange);
+    window.XLSX.writeFile(workbook, filename, { cellStyles: true, compression: true });
   }
 
   async function exportNamelistExcel() {

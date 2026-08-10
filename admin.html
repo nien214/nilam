@@ -36,6 +36,7 @@
       <div class="admin-actions">
         <button id="manageStudentsBtn" type="button" class="save-btn admin-action-btn">Pengurusan Senarai Murid</button>
         <button id="updateNilamBtn" type="button" class="save-btn admin-action-btn">Kemas Kini Data Nilam</button>
+        <button id="exportNilamBtn" type="button" class="save-btn admin-action-btn">Eksport Data NILAM</button>
 
         <button id="compareNamelistBtn" type="button" class="save-btn admin-action-btn">Banding Senarai Nama</button>
         <input id="compareFileInput" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
@@ -219,6 +220,25 @@
     </div>
   </div>
 
+  <div id="exportNilamModal" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="exportNilamModalTitle">
+      <h3 id="exportNilamModalTitle">Eksport Data NILAM</h3>
+      <p class="modal-prompt">Eksport data NILAM dari:</p>
+      <div class="inline-fields export-date-fields">
+        <label for="exportNilamStartDate">Dari</label>
+        <input id="exportNilamStartDate" type="date">
+      </div>
+      <div class="inline-fields export-date-fields">
+        <label for="exportNilamEndDate">Ke</label>
+        <input id="exportNilamEndDate" type="date">
+      </div>
+      <div class="table-actions">
+        <button id="cancelExportNilamBtn" type="button" class="save-btn secondary-btn">Batal</button>
+        <button id="confirmExportNilamBtn" type="button" class="save-btn">Eksport Excel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="compareModal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card-wide">
       <h3>Perbandingan Senarai Nama</h3>
@@ -234,7 +254,8 @@
   <script src="students-data.js"></script>
   <script src="shared-data.js?v=20260307a"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="admin.js?v=20260806a"></script>
+  <script src="nilam-export.js?v=20260810a"></script>
+  <script src="admin.js?v=20260810a"></script>
   <script src="orientation-hint.js"></script>
 </body>
 </html>
