@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin NILAM</title>
-  <link rel="stylesheet" href="styles.css?v=20260227c">
+  <link rel="stylesheet" href="styles.css?v=20261008a">
 </head>
 <body>
   <main class="container">
@@ -232,6 +232,10 @@
         <label for="exportNilamEndDate">Ke</label>
         <input id="exportNilamEndDate" type="date">
       </div>
+      <label class="export-ains-toggle">
+        <input id="exportNilamIncludeAins" type="checkbox">
+        Termasuk data AINS
+      </label>
       <div class="table-actions">
         <button id="cancelExportNilamBtn" type="button" class="save-btn secondary-btn">Batal</button>
         <button id="confirmExportNilamBtn" type="button" class="save-btn">Eksport Excel</button>
@@ -254,8 +258,8 @@
   <script src="students-data.js"></script>
   <script src="shared-data.js?v=20260307a"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="nilam-export.js?v=20260810a"></script>
-  <script src="admin.js?v=20260810a"></script>
+  <script src="nilam-export.js?v=20261008a"></script>
+  <script src="admin.js?v=20261008a"></script>
   <script src="orientation-hint.js"></script>
 </body>
 </html>
