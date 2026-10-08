@@ -102,6 +102,7 @@
     exportNilamModal: document.getElementById("exportNilamModal"),
     exportNilamStartDate: document.getElementById("exportNilamStartDate"),
     exportNilamEndDate: document.getElementById("exportNilamEndDate"),
+    exportNilamIncludeAins: document.getElementById("exportNilamIncludeAins"),
     confirmExportNilamBtn: document.getElementById("confirmExportNilamBtn"),
     cancelExportNilamBtn: document.getElementById("cancelExportNilamBtn"),
     importTeachersBtn: document.getElementById("importTeachersBtn"),
@@ -978,11 +979,15 @@
       }
       setStatus(`Menyediakan eksport Data NILAM dari ${startDate} hingga ${endDate}...`);
 
-      const [records, students] = await Promise.all([
+      const includeAins = Boolean(el.exportNilamIncludeAins?.checked);
+      const [records, students, annualRecords] = await Promise.all([
         fetchNilamRecordsForExport(config, startDate, endDate),
         fetchStudentsFromSupabase(config, endDate.slice(0, 4)),
+        includeAins
+          ? fetchNilamAinsRecordsForExport(config, startDate, endDate)
+          : Promise.resolve([]),
       ]);
-      const rows = exportApi.aggregateRows(records, students, startDate, endDate);
+      const rows = exportApi.aggregateRows(records, students, startDate, endDate, includeAins, annualRecords);
       if (!rows.length) {
         throw new Error("Tiada murid dengan rekod bacaan dalam julat tarikh dipilih.");
       }
@@ -1012,6 +1017,23 @@
       order: "tarikh.asc,id.asc",
     });
     params.append("tarikh", `lte.${endDate}`);
+    const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
+    return fetchAllSupabaseRows(endpoint, {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
+    });
+  }
+
+  async function fetchNilamAinsRecordsForExport(config, startDate, endDate) {
+    const supabaseUrl = config.supabaseUrl.replace(/\/$/, "");
+    const firstYear = startDate.slice(0, 4);
+    const lastYear = endDate.slice(0, 4);
+    const params = new URLSearchParams({
+      select: "id,tarikh,no_kad_pengenalan,nama,kelas,ains,updated_at_client",
+      tarikh: `gte.${firstYear}-01-01`,
+      order: "tarikh.asc,id.asc",
+    });
+    params.append("tarikh", `lte.${lastYear}-12-31`);
     const endpoint = `${supabaseUrl}/rest/v1/nilam_records?${params.toString()}`;
     return fetchAllSupabaseRows(endpoint, {
       apikey: config.supabaseAnonKey,
